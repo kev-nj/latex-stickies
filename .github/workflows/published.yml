@@ -1,0 +1,38 @@
+name: Published package
+
+# Checks what people actually install, rather than what is in the repo.
+# Runs after a release, weekly, and on demand.
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  install:
+    name: npm install / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/smoke.js
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install from the public registry
+        run: npm install latex-stickies
+
+      - name: Boot the installed package (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke.js --package
+
+      - name: Boot the installed package
+        if: runner.os != 'Linux'
+        run: node scripts/smoke.js --package
