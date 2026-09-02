@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:;" />
+  <link rel="stylesheet" href="vendor/katex.min.css" />
+  <link rel="stylesheet" href="note.css" />
+  <title>Sticky</title>
+</head>
+<body>
+  <header id="bar">
+    <div id="drag"></div>
+    <div id="tools">
+      <button id="pin" title="Always on top (Cmd+T)">✛</button>
+      <div id="swatches"></div>
+      <button id="add" title="New note (Cmd+N)">＋</button>
+      <button id="close" title="Close (Cmd+W)">✕</button>
+    </div>
+  </header>
+  <main id="surface">
+    <div id="preview"></div>
+    <textarea id="editor" spellcheck="false"
+      placeholder="Markdown + LaTeX. Inline math $…$, display math $$…$$"></textarea>
+  </main>
+  <script src="vendor/katex.min.js"></script>
+  <script src="vendor/marked.js"></script>
+  <script src="vendor/purify.js"></script>
+  <script src="vendor/prism.js"></script>
+  <script src="markdown.js"></script>
+  <script src="editor.js"></script>
+  <script src="note.js"></script>
+</body>
+</html>

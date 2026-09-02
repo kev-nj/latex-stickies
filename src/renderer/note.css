@@ -1,0 +1,288 @@
+:root {
+  --paper: #fdf3a8;
+  --paper-edge: #f2e07a;
+  --ink: #2b2a1f;
+  --radius: 10px;
+}
+body[data-color="blue"]   { --paper: #cfe6fb; --paper-edge: #b2d5f5; --ink: #1d2c3a; }
+body[data-color="green"]  { --paper: #d3f2c8; --paper-edge: #b8e5a8; --ink: #1f3319; }
+body[data-color="pink"]   { --paper: #fbd2e2; --paper-edge: #f4b6ce; --ink: #3a1f2b; }
+body[data-color="purple"] { --paper: #e2d6fb; --paper-edge: #cdbaf5; --ink: #2a1f3a; }
+body[data-color="gray"]   { --paper: #e6e6e6; --paper-edge: #d2d2d2; --ink: #262626; }
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  overflow: hidden;
+  user-select: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: var(--paper);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+#bar {
+  position: relative;
+  flex: 0 0 26px;
+  background: var(--paper-edge);
+  border-radius: var(--radius) var(--radius) 0 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+#drag {
+  position: absolute;
+  inset: 0;
+  -webkit-app-region: drag;
+}
+
+#tools {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+/* Hidden with `visibility`, not `opacity`: a transparent button still takes
+   clicks, which meant clicking the title bar to drag a note could silently
+   toggle the pin underneath the cursor. */
+#tools > * { visibility: hidden; }
+
+/* Shown while the window is focused, not only while the body is hovered.
+   The title bar is a -webkit-app-region drag surface, which swallows mouse
+   events, so body:hover drops the moment the cursor reaches the bar -- the
+   controls would vanish exactly as you reached for them. Focus is unaffected
+   by the drag region. */
+body.focused #tools > *,
+body:hover #tools > *,
+body.editing #tools > * { visibility: visible; }
+
+/* A pinned note must advertise it even when the toolbar is otherwise hidden. */
+#pin.on { visibility: visible; }
+
+#tools button {
+  -webkit-app-region: no-drag;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  opacity: 0.5;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: default;
+}
+#tools button:hover { opacity: 1; background: rgba(0, 0, 0, 0.07); }
+#pin.on {
+  opacity: 1;
+  color: #b3402b;
+  background: rgba(179, 64, 43, 0.16);
+}
+
+#swatches { display: flex; gap: 4px; margin-left: auto; margin-right: auto; }
+#swatches span {
+  -webkit-app-region: no-drag;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  cursor: default;
+}
+#swatches span.active { outline: 1.5px solid rgba(0, 0, 0, 0.5); outline-offset: 1px; }
+
+#surface {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+}
+
+#editor, #preview {
+  width: 100%;
+  min-height: 100%;
+  padding: 10px 13px 22px;
+  font-size: var(--fs, 15px);
+  line-height: 1.55;
+  user-select: text;
+}
+
+#editor {
+  position: absolute;
+  inset: 0;
+  display: none;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: calc(var(--fs, 15px) - 1px);
+}
+
+body.editing #editor { display: block; }
+body.editing #preview { visibility: hidden; }
+
+#preview { word-break: break-word; }
+#preview > *:first-child { margin-top: 0; }
+#preview > *:last-child { margin-bottom: 0; }
+#preview p { margin: 0 0 0.55em; }
+#preview h1 { font-size: 1.35em; margin: 0.2em 0 0.3em; }
+#preview h2 { font-size: 1.18em; margin: 0.2em 0 0.3em; }
+#preview h3 { font-size: 1.05em; margin: 0.2em 0 0.3em; }
+#preview code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.88em;
+  background: rgba(0, 0, 0, 0.07);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+#preview a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+#preview h4, #preview h5, #preview h6 { font-size: 1em; margin: 0.2em 0 0.3em; }
+
+#preview blockquote {
+  margin: 0.4em 0;
+  padding-left: 0.7em;
+  border-left: 2px solid rgba(0, 0, 0, 0.22);
+  opacity: 0.85;
+}
+
+/* The wrapper anchors the label and copy button; the <pre> inside it scrolls,
+   so anything positioned against the <pre> would scroll out of view. */
+#preview .code-block { position: relative; margin: 0.5em 0; }
+
+#preview pre {
+  margin: 0;
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.07);
+  border-radius: 5px;
+  overflow-x: auto;
+}
+#preview pre code { background: none; padding: 0; font-size: 0.85em; }
+
+/* Label and button share the top-right slot and cross-fade, so reaching for
+   Copy doesn't shift anything. */
+#preview .code-lang,
+#preview .code-copy {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  transition: opacity 0.12s ease;
+}
+
+#preview .code-lang {
+  color: var(--ink);
+  opacity: 0.34;
+  pointer-events: none;
+}
+
+#preview .code-copy {
+  border: 0;
+  border-radius: 3px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--ink);
+  opacity: 0;
+  cursor: default;
+}
+#preview .code-block:hover .code-lang { opacity: 0; }
+#preview .code-block:hover .code-copy { opacity: 0.62; }
+#preview .code-copy:hover { opacity: 1; background: rgba(0, 0, 0, 0.16); }
+#preview .code-copy.done { opacity: 1; background: rgba(47, 107, 74, 0.2); }
+
+/* Syntax colors.
+   Notes come in six pastel papers, so every token is dark and desaturated --
+   a stock editor theme assumes one fixed background and washes out on yellow
+   or pink. Contrast holds on all six. */
+#preview .token.comment,
+#preview .token.prolog,
+#preview .token.doctype,
+#preview .token.cdata { color: var(--ink); opacity: 0.5; font-style: italic; }
+
+#preview .token.punctuation { color: var(--ink); opacity: 0.62; }
+
+#preview .token.keyword,
+#preview .token.rule,
+#preview .token.important,
+#preview .token.atrule { color: #8a2f6b; font-weight: 500; }
+
+#preview .token.string,
+#preview .token.char,
+#preview .token.attr-value,
+#preview .token.regex { color: #1f6b3a; }
+
+#preview .token.number,
+#preview .token.boolean,
+#preview .token.constant,
+#preview .token.symbol { color: #a0522d; }
+
+#preview .token.function,
+#preview .token.class-name,
+#preview .token.tag { color: #1b3a6b; }
+
+#preview .token.property,
+#preview .token.attr-name,
+#preview .token.variable,
+#preview .token.parameter { color: #6b4a1f; }
+
+#preview .token.operator,
+#preview .token.entity,
+#preview .token.url { color: var(--ink); opacity: 0.78; }
+
+#preview .token.deleted { color: #a01f1f; }
+#preview .token.inserted { color: #1f6b3a; }
+#preview .token.italic { font-style: italic; }
+#preview .token.bold { font-weight: 600; }
+
+#preview ul, #preview ol { margin: 0.35em 0; padding-left: 1.35em; }
+#preview li { margin: 0.12em 0; }
+#preview li::marker { opacity: 0.55; }
+/* marked emits a bare <li> with a checkbox, no class, so match on content. */
+#preview li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.15em; }
+#preview li > input[type="checkbox"] { margin-right: 0.45em; vertical-align: baseline; }
+
+#preview hr {
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.18);
+  margin: 0.7em 0;
+}
+
+#preview table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.93em;
+  display: block;
+  overflow-x: auto;
+}
+#preview th, #preview td {
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  padding: 3px 7px;
+  text-align: left;
+}
+#preview th { background: rgba(0, 0, 0, 0.05); }
+
+#preview del { opacity: 0.6; }
+#preview img { max-width: 100%; border-radius: 4px; }
+#preview .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
+#preview .math-error {
+  color: #a01f1f;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85em;
+  text-decoration: underline wavy rgba(160, 31, 31, 0.5);
+}
+#preview .placeholder { opacity: 0.4; }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.16); border-radius: 4px; }

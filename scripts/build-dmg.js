@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+/**
+ * Builds the macOS app with electron-builder.
+ *
+ * The two distribution channels want `electron` in opposite places:
+ *
+ *   - npm needs it in `dependencies`, or `npx latex-stickies` installs no
+ *     runtime and the launcher has nothing to spawn.
+ *   - electron-builder refuses to build at all while it sits there, because a
+ *     packaged app already embeds its runtime and would ship a second copy.
+ *
+ * There is no config flag for this -- the check in app-builder-lib is
+ * unconditional for `electron`. So npm wins (it is the primary channel) and
+ * this script moves the entry into devDependencies just for the build, then
+ * puts package.json back exactly as it was.
+ *
+ * The restore runs from a finally block and from the signal handlers, so an
+ * interrupted build cannot leave the manifest in the swapped state.
+ */
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const MANIFEST = path.join(__dirname, '..', 'package.json');
+const original = fs.readFileSync(MANIFEST, 'utf8');
+
+let restored = false;
+function restore() {
+  if (restored) return;
+  restored = true;
+  fs.writeFileSync(MANIFEST, original);
+}
+
+// Ctrl+C during a two-minute build must not strand the swapped manifest.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    restore();
+    process.exit(1);
+  });
+}
+
+try {
+  const pkg = JSON.parse(original);
+  const version = pkg.dependencies.electron;
+  if (!version) {
+    console.error('electron is not in dependencies -- has package.json drifted?');
+    process.exit(1);
+  }
+
+  delete pkg.dependencies.electron;
+  pkg.devDependencies = { ...pkg.devDependencies, electron: version };
+  fs.writeFileSync(MANIFEST, `${JSON.stringify(pkg, null, 2)}\n`);
+
+  const args = ['electron-builder', ...process.argv.slice(2)];
+  if (args.length === 1) args.push('--mac');
+
+  const result = spawnSync('npx', args, { stdio: 'inherit' });
+  process.exitCode = result.status ?? 1;
+} finally {
+  restore();
+}

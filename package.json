@@ -1,0 +1,75 @@
+{
+  "name": "latex-stickies",
+  "version": "1.0.0",
+  "description": "Sticky notes for your desktop that render LaTeX and Markdown.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "vendor": "node scripts/vendor-prism.js",
+    "test": "node scripts/test.js",
+    "dist": "node scripts/build-dmg.js",
+    "install-app": "npm run dist && rm -rf \"/Applications/LaTeX Stickies.app\" && cp -R \"dist/mac-arm64/LaTeX Stickies.app\" /Applications/ && xattr -dr com.apple.quarantine \"/Applications/LaTeX Stickies.app\"",
+    "prepublishOnly": "npm test"
+  },
+  "build": {
+    "appId": "com.kevinjusak.latexsticky",
+    "productName": "LaTeX Stickies",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns"
+    }
+  },
+  "devDependencies": {
+    "dompurify": "^3.1.6",
+    "electron-builder": "^25.1.8",
+    "jsdom": "^30.0.1",
+    "katex": "^0.16.11",
+    "marked": "^14.0.0",
+    "prismjs": "^1.30.0"
+  },
+  "dependencies": {
+    "electron": "^33.0.0"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  },
+  "author": "Kevin Jusak",
+  "license": "MIT",
+  "keywords": [
+    "latex",
+    "katex",
+    "markdown",
+    "sticky-notes",
+    "notes",
+    "electron",
+    "math"
+  ],
+  "bin": {
+    "latex-stickies": "bin/latex-stickies.js"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "build/icon.icns",
+    "build/icon.png"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kev-nj/latex-stickies.git"
+  },
+  "homepage": "https://github.com/kev-nj/latex-stickies#readme",
+  "bugs": {
+    "url": "https://github.com/kev-nj/latex-stickies/issues"
+  }
+}

@@ -1,0 +1,251 @@
+const { app, BrowserWindow, ipcMain, Menu, screen, shell } = require('electron');
+const path = require('path');
+const store = require('./store');
+
+const COLORS = ['yellow', 'blue', 'green', 'pink', 'purple', 'gray'];
+
+/** noteId -> BrowserWindow */
+const windows = new Map();
+
+function randomId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function cascadeBounds() {
+  const area = screen.getPrimaryDisplay().workArea;
+  const n = windows.size;
+  return {
+    x: area.x + 60 + ((n * 28) % 320),
+    y: area.y + 60 + ((n * 28) % 320),
+    width: 340,
+    height: 380,
+  };
+}
+
+function openExternal(url) {
+  // Only real web links; never file:// or custom schemes typed into a note.
+  if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+}
+
+function openNote(note) {
+  const existing = windows.get(note.id);
+  if (existing) {
+    existing.show();
+    existing.focus();
+    return existing;
+  }
+
+  const win = new BrowserWindow({
+    ...note.bounds,
+    minWidth: 220,
+    minHeight: 160,
+    frame: false,
+    transparent: true,
+    hasShadow: true,
+    alwaysOnTop: !!note.alwaysOnTop,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      additionalArguments: [`--note-id=${note.id}`],
+    },
+  });
+
+  win.loadFile(path.join(__dirname, 'renderer', 'note.html'));
+
+  const persistBounds = () => {
+    if (win.isDestroyed() || win.isMinimized()) return;
+    store.upsert({ id: note.id, bounds: win.getBounds() });
+  };
+  win.on('resize', persistBounds);
+  win.on('move', persistBounds);
+  win.on('closed', () => windows.delete(note.id));
+
+  // Links inside a note open in the real browser, never inside the sticky.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url);
+    return { action: 'deny' };
+  });
+
+  // A note must never navigate away from its own page and become a browser.
+  win.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    openExternal(url);
+  });
+
+  windows.set(note.id, win);
+  return win;
+}
+
+function createNote(seed = {}) {
+  const note = {
+    id: randomId(),
+    body: '',
+    color: seed.color || COLORS[Math.floor(Math.random() * COLORS.length)],
+    fontSize: 15,
+    alwaysOnTop: false,
+    bounds: cascadeBounds(),
+    createdAt: Date.now(),
+    ...seed,
+  };
+  store.upsert(note);
+  openNote(note);
+  return note;
+}
+
+function restoreNotes() {
+  const notes = store.all();
+  if (notes.length === 0) {
+    createNote({ body: WELCOME });
+    return;
+  }
+  notes.forEach(openNote);
+}
+
+const WELCOME = [
+  '# Welcome to LaTeX Stickies',
+  '',
+  'Type math inline like $e^{i\\pi} + 1 = 0$, or on its own line:',
+  '',
+  '$$\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}$$',
+  '',
+  'Markdown works too:',
+  '',
+  '- **bold**, *italic*, `code`, ~~strikethrough~~',
+  '- [ ] task lists',
+  '- > blockquotes, tables, and fenced code blocks',
+  '',
+  'Click the note to edit, click outside to render.',
+  'Cmd+N new note · Cmd+E toggle edit · Cmd+T always on top',
+].join('\n');
+
+function buildMenu() {
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Note', accelerator: 'CmdOrCtrl+N', click: () => createNote() },
+        {
+          label: 'Close Note',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => BrowserWindow.getFocusedWindow()?.close(),
+        },
+        { type: 'separator' },
+        {
+          label: 'Delete Note',
+          accelerator: 'CmdOrCtrl+Backspace',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win) win.webContents.send('request-delete');
+          },
+        },
+      ],
+    },
+    { role: 'editMenu' },
+    {
+      label: 'Note',
+      submenu: [
+        {
+          label: 'Toggle Edit / Preview',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.send('toggle-edit'),
+        },
+        {
+          label: 'Always on Top',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (!win) return;
+            const next = !win.isAlwaysOnTop();
+            win.setAlwaysOnTop(next);
+            win.webContents.send('always-on-top-changed', next);
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Bigger Text',
+          accelerator: 'CmdOrCtrl+Plus',
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.send('font-size', 1),
+        },
+        {
+          label: 'Smaller Text',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.send('font-size', -1),
+        },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        {
+          label: 'Bring All Notes to Front',
+          click: () => windows.forEach((w) => w.show()),
+        },
+        { type: 'separator' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// Every instance reads and writes the same notes.json, so a second one is not
+// just clutter -- two copies hold divergent state in memory and the last to
+// save wins, silently losing notes. Refuse to start twice; surface the notes
+// that are already running instead.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  windows.forEach((win) => {
+    if (win.isMinimized()) win.restore();
+    win.show();
+  });
+});
+
+app.whenReady().then(() => {
+  buildMenu();
+  restoreNotes();
+
+  app.on('activate', () => {
+    if (windows.size === 0) restoreNotes();
+    else windows.forEach((w) => w.show());
+  });
+});
+
+// Stickies live on even with no window open, matching the macOS app.
+app.on('window-all-closed', () => {});
+app.on('before-quit', () => store.saveNow());
+
+ipcMain.handle('note:get', (_e, id) => store.get(id));
+ipcMain.handle('note:update', (_e, patch) => store.upsert(patch));
+ipcMain.handle('note:new', () => createNote().id);
+
+ipcMain.handle('note:delete', (_e, id) => {
+  store.remove(id);
+  const win = windows.get(id);
+  if (win && !win.isDestroyed()) win.destroy();
+});
+
+ipcMain.handle('note:setAlwaysOnTop', (e, value) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (win) win.setAlwaysOnTop(!!value);
+});
+
+ipcMain.handle('note:close', (e) => BrowserWindow.fromWebContents(e.sender)?.close());
+
+ipcMain.handle('note:openExternal', (_e, url) => openExternal(url));
