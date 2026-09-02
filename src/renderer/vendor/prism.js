@@ -1,4 +1,4 @@
-/* Prism, vendored by scripts/vendor-prism.js -- do not edit by hand. */
+/* Prism, vendored by scripts/vendor.js -- do not edit by hand. */
 window.Prism = window.Prism || {}; window.Prism.manual = true;
 
 /* **********************************************

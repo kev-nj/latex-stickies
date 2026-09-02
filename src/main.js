@@ -41,6 +41,25 @@ function openExternal(url) {
   if (/^https?:\/\//i.test(url)) shell.openExternal(url);
 }
 
+/**
+ * Keeps a note reachable. Bounds are restored verbatim from disk, so a note
+ * last placed on a monitor that is no longer attached would open completely
+ * off-screen -- present in the file, invisible on the desk, and indistinguishable
+ * from a lost note. Fall back to a fresh position when the saved rectangle does
+ * not overlap any current display.
+ */
+function onScreenBounds(bounds) {
+  if (!bounds || typeof bounds.x !== 'number' || typeof bounds.y !== 'number') {
+    return cascadeBounds();
+  }
+  const visible = screen.getAllDisplays().some(({ workArea: a }) =>
+    bounds.x < a.x + a.width &&
+    bounds.x + (bounds.width || 0) > a.x &&
+    bounds.y < a.y + a.height &&
+    bounds.y + (bounds.height || 0) > a.y);
+  return visible ? bounds : { ...cascadeBounds(), width: bounds.width, height: bounds.height };
+}
+
 function openNote(note) {
   const existing = windows.get(note.id);
   if (existing) {
@@ -50,7 +69,7 @@ function openNote(note) {
   }
 
   const win = new BrowserWindow({
-    ...note.bounds,
+    ...onScreenBounds(note.bounds),
     minWidth: 220,
     minHeight: 160,
     frame: false,
@@ -222,7 +241,10 @@ function buildMenu() {
 // save wins, silently losing notes. Refuse to start twice; surface the notes
 // that are already running instead.
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  // Leave before any window or handler is set up. Relying on quit() alone to
+  // unwind a half-initialised second instance is how two processes end up
+  // touching notes.json at once.
+  app.exit(0);
 }
 
 app.on('second-instance', () => {
@@ -258,6 +280,16 @@ app.on('before-quit', () => store.saveNow());
 
 ipcMain.handle('note:get', (_e, id) => store.get(id));
 ipcMain.handle('note:update', (_e, patch) => store.upsert(patch));
+
+// A closing note flushes its last edit here. Write straight through rather than
+// joining the debounce: the window is already going away.
+ipcMain.on('note:flush', (e, patch) => {
+  if (patch && patch.id) {
+    store.upsert(patch);
+    store.saveNow();
+  }
+  e.returnValue = true;
+});
 ipcMain.handle('note:new', () => createNote().id);
 
 ipcMain.handle('note:delete', (_e, id) => {

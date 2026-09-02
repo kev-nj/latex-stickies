@@ -28,8 +28,17 @@ function load() {
   }
   try {
     const data = JSON.parse(raw);
-    if (Array.isArray(data.notes)) return data.notes;
-    throw new Error('missing notes array');
+    if (!Array.isArray(data.notes)) throw new Error('missing notes array');
+
+    // A note without an id, or sharing one, would be treated as already-open
+    // and never get a window -- present in the file but unreachable. Drop the
+    // duplicates rather than silently hiding them.
+    const seen = new Set();
+    return data.notes.filter((note) => {
+      if (!note || typeof note.id !== 'string' || seen.has(note.id)) return false;
+      seen.add(note.id);
+      return true;
+    });
   } catch (err) {
     // The file exists but is unreadable. Never silently start empty and then
     // overwrite it -- keep the damaged copy so the notes can be recovered.

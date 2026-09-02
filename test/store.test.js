@@ -67,13 +67,36 @@ for (let r = 0; r < ROUNDS; r++) {
   }
 }
 
+// Malformed entries must be dropped, not silently hidden behind a duplicate id.
+const guard = path.join(dir, 'guard.js');
+fs.writeFileSync(guard, `
+const Module = require('module');
+const orig = Module._load;
+Module._load = (req, ...rest) =>
+  req === 'electron' ? require(${JSON.stringify(stub)}) : orig(req, ...rest);
+const fs = require('fs');
+fs.writeFileSync(${JSON.stringify(FILE)}, JSON.stringify({ notes: [
+  { id: 'a', body: 'keep' },
+  { id: 'a', body: 'duplicate id' },
+  { body: 'no id at all' },
+  null,
+  { id: 'b', body: 'keep too' },
+]}));
+const store = require(${JSON.stringify(path.join(ROOT, 'src/store.js'))});
+console.log(JSON.stringify(store.all().map((n) => n.id)));
+`);
+const kept = JSON.parse(
+  execFileSync(process.execPath, [guard], { stdio: 'pipe' }).toString().trim());
+const dedupeOk = kept.length === 2 && kept[0] === 'a' && kept[1] === 'b';
+console.log(`${dedupeOk ? 'PASS' : 'FAIL'}  malformed and duplicate notes dropped on load`);
+
 const strays = fs.readdirSync(dir).filter((f) => f.includes('.tmp'));
 console.log(`\nafter ${ROUNDS} SIGKILLs mid-save:`);
 console.log(`  empty files:        ${empties}`);
 console.log(`  corrupt/truncated:  ${unparseable}`);
 console.log(`  leftover tmp files: ${strays.length}`);
 
-const pass = empties === 0 && unparseable === 0;
+const pass = empties === 0 && unparseable === 0 && dedupeOk;
 console.log(pass ? '\nPASS  notes survived every kill' : '\nFAIL  data loss observed');
 fs.rmSync(dir, { recursive: true, force: true });
 process.exit(pass ? 0 : 1);

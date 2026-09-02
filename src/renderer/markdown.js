@@ -54,7 +54,8 @@ const blockMath = {
 
 function placeholder(tex, display) {
   mathChunks.push({ tex, display });
-  return `@@MATH${mathChunks.length - 1}@@`;
+  const tag = display ? 'div' : 'span';
+  return `<${tag} data-math="${mathChunks.length - 1}"></${tag}>`;
 }
 
 const escapeHtml = (s) =>
@@ -112,19 +113,42 @@ function renderMath(chunk) {
   }
 }
 
-/** Markdown source -> HTML string, safe to assign to innerHTML. */
-function renderMarkdown(src) {
+/**
+ * Renders note text into `target`.
+ *
+ * Math is spliced in as a DOM operation, never by string replacement. An
+ * earlier version substituted `@@MATH0@@` markers in the sanitized HTML string
+ * and assigned the result to innerHTML -- but a note could put that marker
+ * inside an attribute (`<img title="@@MATH0@@">`), and the KaTeX markup, which
+ * carries its own quotes and angle brackets, then broke out of the attribute
+ * when the string was re-parsed. That produced live elements DOMPurify had
+ * never seen, including an <img> pointing anywhere the author liked. Filling
+ * placeholder *elements* after sanitizing keeps every insertion scoped to one
+ * node, so nothing can escape into the surrounding markup.
+ */
+function renderInto(target, src) {
   mathChunks.length = 0;
 
-  const html = DOMPurify.sanitize(marked.parse(src), {
+  target.innerHTML = DOMPurify.sanitize(marked.parse(src), {
     ADD_ATTR: ['target'],
     // `input` stays allowed so GFM task lists keep their checkboxes; DOMPurify
     // strips event handlers and dangerous attributes from it regardless.
     FORBID_TAGS: ['style', 'form', 'button', 'iframe', 'object', 'embed'],
   });
 
-  return html.replace(/@@MATH(\d+)@@/g, (whole, i) => {
-    const chunk = mathChunks[Number(i)];
-    return chunk ? renderMath(chunk) : whole;
+  target.querySelectorAll('[data-math]').forEach((slot) => {
+    const chunk = mathChunks[Number(slot.dataset.math)];
+    // KaTeX output is generated locally with trust disabled, and lands inside
+    // this one element -- it cannot alter the structure around it.
+    if (chunk) slot.innerHTML = renderMath(chunk);
+    else slot.remove();
   });
+}
+
+/** Markdown source -> HTML string. Serialized from a real DOM, so attribute
+ *  values are escaped and re-parsing yields the same tree. */
+function renderMarkdown(src) {
+  const scratch = document.createElement('div');
+  renderInto(scratch, src);
+  return scratch.innerHTML;
 }

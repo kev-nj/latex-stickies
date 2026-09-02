@@ -91,6 +91,24 @@ const checks = [
      && !renderMarkdown('```python\n<script>alert(1)</script>\n```').includes('<script>')],
   ['no button from note text', !renderMarkdown('<button onclick="x()">hi</button>').includes('<button')],
   ['inline code untouched', renderMarkdown('`$x_1$`').includes('$x_1$')],
+
+  // Math is filled into placeholder ELEMENTS after sanitizing. Substituting it
+  // into the sanitized HTML *string* let KaTeX's own quotes break out of an
+  // attribute a note had put the marker inside, producing elements DOMPurify
+  // never saw. Every rendered formula must stay inside its own slot.
+  ['math stays inside its slot', (() => {
+    const el = dom.window.document.createElement('div');
+    el.innerHTML = renderMarkdown('<img src=x title="@@MATH0@@">\n\n$x^2$');
+    const stray = [...el.querySelectorAll('.katex')]
+      .filter((n) => !n.closest('[data-math]'));
+    return stray.length === 0;
+  })()],
+  ['marker text in an attribute stays inert', (() => {
+    const el = dom.window.document.createElement('div');
+    el.innerHTML = renderMarkdown('<img src=x title="@@MATH0@@">\n\n$x^2$');
+    const img = el.querySelector('img');
+    return img && img.getAttribute('title') === '@@MATH0@@';
+  })()],
 ];
 console.log('---');
 let bad = 0;

@@ -18,7 +18,7 @@ function render(src) {
     preview.innerHTML = '<span class="placeholder">Empty note \u2014 click to write.</span>';
     return;
   }
-  preview.innerHTML = renderMarkdown(src);
+  renderInto(preview, src);
   decorateCodeBlocks();
 }
 
@@ -88,6 +88,17 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => window.sticky.update({ body: note.body }), 250);
 }
+
+// Typing is saved on a 250ms debounce, which Cmd+W would otherwise outrun: the
+// window is closed from the main process, so the textarea never blurs and the
+// pending timer dies with the renderer, losing the last few words typed.
+// beforeunload is the last point where the renderer can still be heard.
+window.addEventListener('beforeunload', () => {
+  if (!note) return;
+  clearTimeout(saveTimer);
+  if (document.body.classList.contains('editing')) note.body = editor.value;
+  window.sticky.flush(note.body);
+});
 
 function setEditing(on) {
   document.body.classList.toggle('editing', on);

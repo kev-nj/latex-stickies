@@ -53,6 +53,8 @@ Enter, and quotes are left alone so `don't` types normally.
 
 ## Keyboard
 
+Use `Ctrl` in place of `Cmd` on Windows and Linux.
+
 | | |
 |---|---|
 | `Cmd+N` | New note |
@@ -65,7 +67,11 @@ Enter, and quotes are left alone so `don't` types normally.
 
 ## Where notes live
 
-`~/Library/Application Support/latex-sticky/notes.json` on macOS.
+| | |
+|---|---|
+| macOS | `~/Library/Application Support/latex-stickies/notes.json` |
+| Windows | `%APPDATA%\latex-stickies\notes.json` |
+| Linux | `~/.config/latex-stickies/notes.json` |
 
 Saves are atomic -- written to a temp file, flushed, then renamed over the
 target -- so a crash, a force quit, or pulling the power leaves the previous
@@ -78,7 +84,7 @@ would silently overwrite the other.
 ```
 npm install
 npm start        # run from source
-npm test         # 4 suites, ~70 assertions
+npm test         # 4 suites, 62 assertions
 npm run vendor   # regenerate the bundled Prism
 npm run icon     # rebuild the app icon from assets/icon-master.png
 ```
