@@ -16,7 +16,7 @@ npm install -g latex-stickies
 latex-stickies
 ```
 
-Requires Node 18+. The first run downloads the Electron runtime (~230 MB), so
+Requires Node 22.12 or newer. The first run downloads the Electron runtime (~230 MB), so
 give it a minute; later launches are instant.
 
 ## Writing in a note

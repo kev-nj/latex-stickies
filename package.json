@@ -37,10 +37,10 @@
     "prismjs": "^1.30.0"
   },
   "dependencies": {
-    "electron": "^33.0.0"
+    "electron": "^44.1.1"
   },
   "allowScripts": {
-    "electron@33.4.11": true
+    "electron@44.1.1": true
   },
   "author": "Kevin Jusak",
   "license": "MIT",
@@ -63,7 +63,7 @@
     "build/icon.png"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12.0"
   },
   "repository": {
     "type": "git",
