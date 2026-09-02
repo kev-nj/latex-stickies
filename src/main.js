@@ -1,6 +1,20 @@
 const { app, BrowserWindow, ipcMain, Menu, screen, shell } = require('electron');
 const path = require('path');
+
+// Pin the identity before anything derives a path from it.
+//
+// Electron builds userData out of the app name, so the notes directory would
+// otherwise follow whatever `name` happens to be in package.json. Renaming the
+// package for npm silently moved every note to a new folder and greeted the
+// user with an empty desk. Fixing the directory here decouples where notes live
+// from what the package is called.
+app.setName('LaTeX Stickies');
+app.setPath('userData', path.join(app.getPath('appData'), 'latex-stickies'));
+
+// Required after the path is set: store.js resolves notes.json when it loads.
 const store = require('./store');
+
+const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 
 const COLORS = ['yellow', 'blue', 'green', 'pink', 'purple', 'gray'];
 
@@ -41,6 +55,7 @@ function openNote(note) {
     minHeight: 160,
     frame: false,
     transparent: true,
+    icon: ICON,
     hasShadow: true,
     alwaysOnTop: !!note.alwaysOnTop,
     skipTaskbar: false,
@@ -218,6 +233,16 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(() => {
+  // Run from npm there is no .app bundle to carry the icon, so macOS would show
+  // the generic Electron atom in the Dock. Set it explicitly.
+  if (process.platform === 'darwin' && app.dock) {
+    try {
+      app.dock.setIcon(ICON);
+    } catch (err) {
+      console.error('could not set dock icon', err);
+    }
+  }
+
   buildMenu();
   restoreNotes();
 

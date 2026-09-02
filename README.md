@@ -80,7 +80,13 @@ npm install
 npm start        # run from source
 npm test         # 4 suites, ~70 assertions
 npm run vendor   # regenerate the bundled Prism
+npm run icon     # rebuild the app icon from assets/icon-master.png
 ```
+
+Artwork lives in `assets/`: `logo.jpeg` is the original, and `icon-master.png`
+is the prepared 1024px master the icon is generated from -- transparent ground,
+art filling 824 of the canvas, which is the macOS convention that keeps an icon
+at the same visual weight as the rest of the Dock.
 
 The renderer loads over `file://` under a strict content-security policy, so
 KaTeX, marked, DOMPurify and Prism are vendored into `src/renderer/vendor/`
