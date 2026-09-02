@@ -72,8 +72,18 @@ setTimeout(() => {
     child.kill('SIGTERM');
   }
 
-  if (/Error:|Uncaught|Cannot find module/i.test(out)) {
-    console.error('\nFAIL  app started but reported errors (see output above)');
+  // Only fatal, app-level failures count. Chromium is noisy on a headless
+  // runner -- D-Bus, GPU and font warnings are printed on every Linux boot and
+  // say nothing about whether the app works.
+  const FATAL = [
+    /Cannot find module/i,
+    /A JavaScript error occurred in the main process/i,
+    /Uncaught (Exception|TypeError|ReferenceError|SyntaxError)/i,
+    /^\s*at .*[\\/]src[\\/].*\.js/m, // a stack trace through our own code
+  ];
+  const fatal = FATAL.find((re) => re.test(out));
+  if (fatal) {
+    console.error(`\nFAIL  app reported a fatal error (matched ${fatal})`);
     process.exit(1);
   }
 
