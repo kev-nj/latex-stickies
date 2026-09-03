@@ -19,6 +19,7 @@ const {
   defaultKeymap, history, historyKeymap, indentWithTab,
   markdown, markdownLanguage, codeLanguages,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle, tags,
+  search, searchKeymap, highlightSelectionMatches,
 } = window.CM;
 
 /**
@@ -604,7 +605,12 @@ function createLiveEditor({ parent, doc, onChange }) {
         history(),
         // Ahead of the defaults, so Mod-i and friends are not swallowed.
         Prec.high(keymap.of(shortcuts)),
+        // Search ahead of the defaults: Cmd+F must open the panel rather than
+        // fall through to anything else bound to it.
+        Prec.high(keymap.of(searchKeymap)),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        search({ top: true }),
+        highlightSelectionMatches(),
         markdown({ base: markdownLanguage, codeLanguages }),
         Prec.high(syntaxHighlighting(markdownStyle)),
         syntaxHighlighting(defaultHighlightStyle), // colours inside code fences

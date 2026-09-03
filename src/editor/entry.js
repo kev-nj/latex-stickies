@@ -23,6 +23,9 @@ import {
   LanguageDescription,
 } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
+import {
+  search, searchKeymap, highlightSelectionMatches, openSearchPanel,
+} from '@codemirror/search';
 
 import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
@@ -66,4 +69,5 @@ window.CM = {
   markdown, markdownLanguage,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle,
   tags, codeLanguages,
+  search, searchKeymap, highlightSelectionMatches, openSearchPanel,
 };

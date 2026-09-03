@@ -4,6 +4,8 @@ const SWATCH = {
   pink: '#fbd2e2', purple: '#e2d6fb', gray: '#e6e6e6',
 };
 
+const { openSearchPanel } = window.CM;
+
 const host = document.getElementById('host');
 const pin = document.getElementById('pin');
 
@@ -77,6 +79,50 @@ async function copyNoteAsImage() {
 }
 
 window.sticky.on('copy-note-image', copyNoteAsImage);
+window.sticky.on('find-in-note', () => view && openSearchPanel(view));
+
+/**
+ * Describe some maths in words, get LaTeX.
+ *
+ * Takes the selection when there is one -- select "integral of x squared",
+ * press the shortcut, and it becomes the maths. Otherwise it asks.
+ */
+window.sticky.on('describe-latex', async () => {
+  if (!view) return;
+  const sel = view.state.selection.main;
+  const selected = view.state.sliceDoc(sel.from, sel.to).trim();
+  const description = selected || window.prompt('Describe the maths:');
+  if (!description) return;
+
+  const { latex, error } = await window.sticky.ai.toLatex({ text: description });
+  if (error || !latex) {
+    window.alert(error === 'ollama-unreachable'
+      ? 'Ollama is not running. Start it, or turn on Note > Autocomplete for setup help.'
+      : 'No LaTeX came back. Try describing it differently.');
+    return;
+  }
+
+  // Multi-line maths belongs on its own line; a short expression sits inline.
+  const display = latex.includes('\n') || latex.includes('\\begin');
+  const wrapped = display ? `$$\n${latex}\n$$` : `$${latex}$`;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: wrapped },
+    selection: { anchor: sel.from + wrapped.length },
+  });
+});
+
+// The file changed underneath us -- another editor, Dropbox, a git checkout.
+// Replace the text but keep the caret where it was, so a sync landing while
+// you are typing does not throw you back to the top of the note.
+window.sticky.on('note-changed', (body) => {
+  if (!view || body === view.state.doc.toString()) return;
+  const caret = Math.min(view.state.selection.main.head, body.length);
+  note.body = body;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: body },
+    selection: { anchor: caret },
+  });
+});
 
 // Right-click a rendered equation to copy it as an image or as LaTeX.
 host.addEventListener('contextmenu', async (e) => {

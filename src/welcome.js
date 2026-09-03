@@ -38,6 +38,7 @@ const WELCOME = [
   'Cmd+N new · Cmd+W close · Cmd+Shift+Backspace delete',
   'Cmd+B bold · Cmd+I italic · Cmd+K link',
   'Cmd+T keep on top · Cmd+Shift+C copy note as image',
+  'Cmd+F find · Cmd+Shift+M maths from a description',
   '',
   'Notes save themselves. [Source and issues](https://github.com/kev-nj/latex-stickies).',
 ].join('\n');

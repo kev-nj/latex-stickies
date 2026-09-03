@@ -228,6 +228,28 @@ body.editing #tools > * { visibility: visible; }
   font-weight: 600;
 }
 
+/* The search panel, dressed to match the paper rather than a code editor. */
+.cm-editor .cm-panels {
+  background: var(--paper-edge);
+  color: var(--ink);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+.cm-editor .cm-panel.cm-search { padding: 5px 7px; font-size: 12px; }
+.cm-editor .cm-panel.cm-search input,
+.cm-editor .cm-panel.cm-search button {
+  font-family: inherit;
+  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  padding: 1px 5px;
+}
+.cm-editor .cm-panel.cm-search label { opacity: 0.75; }
+.cm-editor .cm-searchMatch { background: rgba(255, 190, 60, 0.45); }
+.cm-editor .cm-searchMatch-selected { background: rgba(255, 140, 20, 0.7); }
+.cm-editor .cm-selectionMatch { background: rgba(0, 0, 0, 0.09); }
+
 .cm-editor .cm-link {
   color: inherit;
   text-decoration: underline;

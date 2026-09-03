@@ -43,6 +43,14 @@ function randomId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+/** What to call a note in a menu: its first non-empty line. */
+function titleOf(note) {
+  const first = (note.body || '').split('\n').find((l) => l.trim());
+  if (!first) return 'Untitled note';
+  const clean = first.replace(/^#+\s*/, '').trim();
+  return clean.length > 40 ? `${clean.slice(0, 40)}...` : clean;
+}
+
 function cascadeBounds() {
   const area = screen.getPrimaryDisplay().workArea;
   const n = windows.size;
@@ -115,6 +123,7 @@ function openNote(note) {
   win.on('closed', () => {
     windows.delete(note.id);
     smokeLog(`windows=${windows.size}`);
+    buildMenu(); // the tick beside this note in the Notes menu
   });
 
   // Links inside a note open in the real browser, never inside the sticky.
@@ -180,6 +189,15 @@ async function buildMenu() {
     },
   }));
 
+  // Every saved note, so a closed one is not lost until the next launch --
+  // until now nothing in the interface said it still existed.
+  const noteItems = store.all().map((note) => ({
+    label: titleOf(note),
+    type: 'checkbox',
+    checked: windows.has(note.id),
+    click: () => openNote(store.get(note.id) || note),
+  }));
+
   const template = [
     {
       label: app.name,
@@ -225,6 +243,25 @@ async function buildMenu() {
           accelerator: 'CmdOrCtrl+E',
           click: () => BrowserWindow.getFocusedWindow()?.webContents.send('toggle-edit'),
         },
+        {
+          label: 'Maths from Description...',
+          accelerator: 'CmdOrCtrl+Shift+M',
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.send('describe-latex'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Find in Note',
+          accelerator: 'CmdOrCtrl+F',
+          // The editor owns the panel; this entry is for discoverability.
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.send('find-in-note'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Open Notes Folder',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => shell.openPath(store.DIR),
+        },
+        { type: 'separator' },
         {
           label: 'Autocomplete (Ollama)',
           type: 'checkbox',
@@ -297,6 +334,12 @@ async function buildMenu() {
       ],
     },
     {
+      label: 'Notes',
+      submenu: noteItems.length
+        ? noteItems
+        : [{ label: 'No notes yet', enabled: false }],
+    },
+    {
       label: 'Window',
       submenu: [
         { role: 'minimize' },
@@ -345,6 +388,20 @@ function surfaceNotes() {
 
 app.on('second-instance', surfaceNotes);
 
+/**
+ * Follows edits made to the note files by anything else -- another editor,
+ * Dropbox, a git checkout. The open window updates in place rather than
+ * quietly overwriting what was changed on disk.
+ */
+function watchNotesFolder() {
+  store.watch((changed) => {
+    for (const note of changed) {
+      const win = windows.get(note.id);
+      if (win && !win.isDestroyed()) win.webContents.send('note-changed', note.body);
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   // Run from npm there is no .app bundle to carry the icon, so macOS would show
   // the generic Electron atom in the Dock. Set it explicitly.
@@ -362,6 +419,7 @@ app.whenReady().then(async () => {
 
   await buildMenu();
   restoreNotes();
+  watchNotesFolder();
 
   if (SMOKE_CLOSE_MS) {
     setTimeout(() => {
@@ -384,7 +442,24 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => store.saveNow());
 
 ipcMain.handle('note:get', (_e, id) => store.get(id));
-ipcMain.handle('note:update', (_e, patch) => store.upsert(patch));
+let titleTimer = null;
+let lastTitles = '';
+
+/** Rebuilds the Notes menu when a title changes, at a human pace. */
+function refreshNoteTitles() {
+  clearTimeout(titleTimer);
+  titleTimer = setTimeout(() => {
+    const titles = store.all().map(titleOf).join('\u0000');
+    if (titles === lastTitles) return;
+    lastTitles = titles;
+    buildMenu();
+  }, 800);
+}
+
+ipcMain.handle('note:update', (_e, patch) => {
+  store.upsert(patch);
+  if (patch && patch.body !== undefined) refreshNoteTitles();
+});
 
 // A closing note flushes its last edit here. Write straight through rather than
 // joining the debounce: the window is already going away.
@@ -395,12 +470,17 @@ ipcMain.on('note:flush', (e, patch) => {
   }
   e.returnValue = true;
 });
-ipcMain.handle('note:new', () => createNote().id);
+ipcMain.handle('note:new', () => {
+  const id = createNote().id;
+  buildMenu();
+  return id;
+});
 
 ipcMain.handle('note:delete', (_e, id) => {
   store.remove(id);
   const win = windows.get(id);
   if (win && !win.isDestroyed()) win.destroy();
+  buildMenu();
 });
 
 ipcMain.handle('note:setAlwaysOnTop', (e, value) => {
@@ -495,6 +575,15 @@ ipcMain.handle('ai:settings', async () => {
 });
 
 ipcMain.handle('ai:complete', (_e, payload) => ai.complete(payload || {}));
+
+ipcMain.handle('ai:toLatex', async (_e, { text } = {}) => {
+  const saved = store.settings();
+  const { available, models } = await ai.status();
+  if (!available || !models.length) return { error: 'ollama-unreachable' };
+  const names = models.map((m) => m.name);
+  const model = names.includes(saved.aiModel) ? saved.aiModel : ai.pickDefault(models);
+  return { latex: await ai.toLatex({ text, model }) };
+});
 
 /**
  * Puts a PNG on the clipboard.

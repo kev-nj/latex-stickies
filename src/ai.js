@@ -168,4 +168,50 @@ async function complete({ prefix, suffix, model }) {
   }
 }
 
-module.exports = { status, complete, pickDefault, trimOverlap, tidy, HOST };
+/**
+ * Turns a description of some maths into LaTeX.
+ *
+ * Unlike autocomplete this is a real instruction, so it goes through the chat
+ * template rather than fill-in-the-middle -- the model is being asked a
+ * question, not continuing a sentence.
+ */
+async function toLatex({ text, model }) {
+  if (!text || !text.trim()) return '';
+
+  const prompt = 'Write the LaTeX for the following, and reply with the LaTeX '
+    + 'only -- no explanation, no dollar signs, no code fences.\n\n'
+    + `${text.trim()}\n`;
+
+  try {
+    const res = await withTimeout(`${HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+        options: { num_predict: 120, temperature: 0.1 },
+      }),
+    }, 20000);
+    if (!res.ok) return '';
+    const data = await res.json();
+
+    // Models wrap the answer in fences, dollars or \[ \] however firmly you
+    // ask them not to. The caller supplies its own delimiters.
+    return String(data.response || '')
+      .replace(/```[a-z]*\n?/gi, '')
+      .replace(/```/g, '')
+      .trim()
+      .replace(/^\\\[|\\\]$/g, '')
+      .replace(/^\\\(|\\\)$/g, '')
+      .trim()
+      .replace(/^\$+|\$+$/g, '')
+      .trim();
+  } catch (_) {
+    return '';
+  }
+}
+
+module.exports = {
+  status, complete, toLatex, pickDefault, trimOverlap, tidy, HOST,
+};

@@ -61,6 +61,9 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 | `Cmd+N` | New note |
 | `Cmd+W` | Close note |
 | `Cmd+Shift+Backspace` | Delete note |
+| `Cmd+F` | Find in note |
+| `Cmd+Shift+M` | Maths from a description |
+| `Cmd+Shift+O` | Open the notes folder |
 | `Cmd+E` | Toggle edit / preview |
 | `Cmd+T` | Keep on top |
 | `Cmd+±` | Text size |
@@ -71,11 +74,21 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 
 ## Where notes live
 
-| | |
-|---|---|
-| macOS | `~/Library/Application Support/latex-stickies/notes.json` |
-| Windows | `%APPDATA%\latex-stickies\notes.json` |
-| Linux | `~/.config/latex-stickies/notes.json` |
+One Markdown file per note, in a folder you can open:
+
+```
+~/Documents/LaTeX Stickies/
+  shopping-list.md
+  lecture-3.md
+  .stickies.json      # colours, positions, pinned state
+```
+
+They are ordinary files, so you can grep them, keep the folder in git, sync it
+through Dropbox, or edit a note in another editor -- the open note follows the
+change. Files are named from the note's first line, and renamed if you retitle
+it; a file you rename yourself is left alone. `Cmd+Shift+O` opens the folder.
+
+An existing `notes.json` is migrated the first time and then left in place.
 
 Saves are atomic -- written to a temp file, flushed, then renamed over the
 target -- so a crash, a force quit, or pulling the power leaves the previous

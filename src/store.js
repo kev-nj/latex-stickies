@@ -1,60 +1,205 @@
+/**
+ * Notes on disk: one Markdown file per note, in a folder you can open.
+ *
+ *   ~/Documents/LaTeX Stickies/shopping-list.md
+ *   ~/Documents/LaTeX Stickies/.stickies.json
+ *
+ * The point of a folder over a single JSON blob is that the notes stop being
+ * trapped in this app: they are greppable, git-versionable, syncable through
+ * Dropbox, and editable in any other editor.
+ *
+ * Metadata -- colour, window bounds, pinned state -- lives in the sidecar
+ * index rather than in frontmatter, so the note files stay clean. A .tex file
+ * with YAML at the top does not compile, which would defeat writing .tex at
+ * all.
+ *
+ * Writes are atomic: temp file, fsync, rename. A crash or force quit leaves
+ * the previous file intact rather than a truncated one.
+ */
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const FILE = path.join(app.getPath('userData'), 'notes.json');
+const DIR = path.join(app.getPath('documents'), 'LaTeX Stickies');
+const INDEX = path.join(DIR, '.stickies.json');
+/** The old single-file store, migrated from once and then left alone. */
+const LEGACY = path.join(app.getPath('userData'), 'notes.json');
 
-// A kill between the temp write and the rename strands a .tmp file. They are
-// never read, so clear any from previous runs rather than letting them pile up.
-function sweepTempFiles() {
-  const dir = path.dirname(FILE);
-  const prefix = `${path.basename(FILE)}.`;
+const DEFAULTS = { color: 'yellow', fontSize: 15, alwaysOnTop: false };
+
+let notes = null; // [{ id, file, body, color, fontSize, alwaysOnTop, bounds }]
+let timer = null;
+
+/* ---------- names ---------- */
+
+/** The stem of a filename, from a note's first line. */
+function slugBase(body) {
+  const first = (body || '').split('\n').find((l) => l.trim()) || '';
+  return first
+    .replace(/^#+\s*/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'note';
+}
+
+/** A filename a person would recognise, taken from the note's first line. */
+function slugFor(body, taken, ext = '.md') {
+  const base = slugBase(body);
+  let name = `${base}${ext}`;
+  let n = 2;
+  while (taken.has(name)) {
+    name = `${base}-${n}${ext}`;
+    n += 1;
+  }
+  return name;
+}
+
+/** Was this file named by us, from that body, rather than by a person? */
+function autoNamed(file, body) {
+  const base = slugBase(body);
+  const ext = path.extname(file);
+  return file === `${base}${ext}` || new RegExp(`^${base}-\\d+$`).test(path.basename(file, ext));
+}
+
+/* ---------- reading ---------- */
+
+function readIndex() {
   try {
-    for (const name of fs.readdirSync(dir)) {
-      if (name.startsWith(prefix) && name.endsWith('.tmp')) {
-        try { fs.unlinkSync(path.join(dir, name)); } catch (_) {}
-      }
-    }
-  } catch (_) {}
+    const data = JSON.parse(fs.readFileSync(INDEX, 'utf8'));
+    return data && typeof data === 'object' ? data.notes || {} : {};
+  } catch (_) {
+    return {};
+  }
 }
 
 function load() {
+  fs.mkdirSync(DIR, { recursive: true });
   sweepTempFiles();
-  let raw;
-  try {
-    raw = fs.readFileSync(FILE, 'utf8');
-  } catch (_) {
-    return []; // no file yet: first run
-  }
-  try {
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data.notes)) throw new Error('missing notes array');
+  migrateLegacy();
 
-    // A note without an id, or sharing one, would be treated as already-open
-    // and never get a window -- present in the file but unreachable. Drop the
-    // duplicates rather than silently hiding them.
-    const seen = new Set();
-    return data.notes.filter((note) => {
-      if (!note || typeof note.id !== 'string' || seen.has(note.id)) return false;
-      seen.add(note.id);
-      return true;
-    });
-  } catch (err) {
-    // The file exists but is unreadable. Never silently start empty and then
-    // overwrite it -- keep the damaged copy so the notes can be recovered.
-    const backup = `${FILE}.corrupt-${Date.now()}`;
+  const meta = readIndex();
+  const files = fs.readdirSync(DIR)
+    .filter((f) => /\.(md|tex|txt)$/i.test(f) && !f.startsWith('.'))
+    .sort();
+
+  return files.map((file) => {
+    const saved = meta[file] || {};
+    let body = '';
     try {
-      fs.copyFileSync(FILE, backup);
-      console.error(`notes.json unreadable (${err.message}); kept copy at ${backup}`);
-    } catch (copyErr) {
-      console.error('notes.json unreadable and could not be backed up', copyErr);
+      body = fs.readFileSync(path.join(DIR, file), 'utf8');
+    } catch (_) { /* unreadable file: show it empty rather than vanish */ }
+    return {
+      ...DEFAULTS,
+      ...saved,
+      // The file is the source of truth for content; the index only decorates.
+      id: saved.id || file,
+      file,
+      body,
+    };
+  });
+}
+
+/**
+ * Brings notes.json across the first time, and leaves it where it is.
+ *
+ * Deleting it would make this irreversible, and the whole history of this
+ * app's storage bugs argues for keeping the old copy until the user is sure.
+ */
+function migrateLegacy() {
+  if (fs.existsSync(INDEX) || !fs.existsSync(LEGACY)) return;
+
+  let old;
+  try {
+    old = JSON.parse(fs.readFileSync(LEGACY, 'utf8')).notes;
+    if (!Array.isArray(old) || !old.length) return;
+  } catch (_) {
+    return;
+  }
+
+  const taken = new Set(fs.readdirSync(DIR));
+  const meta = {};
+  for (const note of old) {
+    const file = slugFor(note.body, taken);
+    taken.add(file);
+    try {
+      writeFileAtomic(path.join(DIR, file), note.body || '');
+      meta[file] = {
+        id: note.id || file,
+        color: note.color || DEFAULTS.color,
+        fontSize: note.fontSize || DEFAULTS.fontSize,
+        alwaysOnTop: !!note.alwaysOnTop,
+        bounds: note.bounds,
+      };
+    } catch (err) {
+      console.error(`could not migrate a note to ${file}`, err);
     }
-    return [];
+  }
+  writeIndex(meta);
+  console.log(`migrated ${Object.keys(meta).length} notes to ${DIR}`);
+}
+
+/* ---------- writing ---------- */
+
+function writeFileAtomic(target, contents) {
+  justWrote.set(path.basename(target), Date.now());
+  const tmp = `${target}.${process.pid}.tmp`;
+  const fd = fs.openSync(tmp, 'w');
+  try {
+    fs.writeSync(fd, contents);
+    fs.fsyncSync(fd); // durable before the rename makes it live
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, target);
+}
+
+// A kill between the temp write and the rename strands a .tmp file.
+function sweepTempFiles() {
+  try {
+    for (const name of fs.readdirSync(DIR)) {
+      if (name.endsWith('.tmp')) {
+        try { fs.unlinkSync(path.join(DIR, name)); } catch (_) { /* ignore */ }
+      }
+    }
+  } catch (_) { /* ignore */ }
+}
+
+function writeIndex(meta) {
+  try {
+    writeFileAtomic(INDEX, `${JSON.stringify({ notes: meta }, null, 2)}\n`);
+  } catch (err) {
+    console.error('failed to write the notes index', err);
   }
 }
 
-let notes = null;
-let timer = null;
+function flush() {
+  timer = null;
+  const meta = {};
+  for (const note of all()) {
+    try {
+      writeFileAtomic(path.join(DIR, note.file), note.body || '');
+    } catch (err) {
+      console.error(`failed to save ${note.file}`, err);
+    }
+    meta[note.file] = {
+      id: note.id,
+      color: note.color,
+      fontSize: note.fontSize,
+      alwaysOnTop: note.alwaysOnTop,
+      bounds: note.bounds,
+    };
+  }
+  writeIndex(meta);
+}
+
+// Writes are frequent (every keystroke, every window drag), so coalesce them.
+function save() {
+  if (timer) return;
+  timer = setTimeout(flush, 400);
+}
+
+/* ---------- the store ---------- */
 
 function all() {
   if (notes === null) notes = load();
@@ -65,45 +210,46 @@ function get(id) {
   return all().find((n) => n.id === id) || null;
 }
 
-// Write to a sibling temp file and rename over the target. rename() is atomic,
-// so a crash or a kill mid-save leaves the previous good file intact instead of
-// a truncated (or empty) one -- writeFileSync truncates in place and can lose
-// every note if the process dies at the wrong moment.
-function flush() {
-  timer = null;
-  const tmp = `${FILE}.${process.pid}.tmp`;
-  try {
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    const payload = JSON.stringify({ notes: all() }, null, 2);
-    const fd = fs.openSync(tmp, 'w');
-    try {
-      fs.writeSync(fd, payload);
-      fs.fsyncSync(fd); // durable on disk before the rename makes it live
-    } finally {
-      fs.closeSync(fd);
-    }
-    fs.renameSync(tmp, FILE);
-  } catch (err) {
-    console.error('failed to save notes', err);
-    try { fs.unlinkSync(tmp); } catch (_) {}
-  }
-}
-
-// Writes are frequent (every keystroke, every window drag), so coalesce them.
-function save() {
-  if (timer) return;
-  timer = setTimeout(flush, 400);
-}
-
 function upsert(note) {
   const list = all();
   const i = list.findIndex((n) => n.id === note.id);
-  if (i === -1) list.push(note);
-  else list[i] = { ...list[i], ...note };
+
+  if (i === -1) {
+    const taken = new Set(list.map((n) => n.file));
+    list.push({ ...DEFAULTS, ...note, file: note.file || slugFor(note.body, taken) });
+    save();
+    return;
+  }
+
+  const before = list[i];
+  list[i] = { ...before, ...note };
+
+  // A note is created empty, so its first filename is always "note.md".
+  // Follow the title once the note has one -- otherwise every note keeps a
+  // meaningless name and the folder is no more readable than the old blob.
+  // A file someone renamed themselves is left alone.
+  const titleChanged = note.body !== undefined && slugBase(note.body) !== slugBase(before.body);
+  if (titleChanged && autoNamed(before.file, before.body)) {
+    const taken = new Set(list.filter((n) => n !== list[i]).map((n) => n.file));
+    const next = slugFor(list[i].body, taken, path.extname(before.file) || '.md');
+    try {
+      const from = path.join(DIR, before.file);
+      if (fs.existsSync(from)) fs.renameSync(from, path.join(DIR, next));
+      list[i].file = next;
+    } catch (err) {
+      console.error(`could not rename ${before.file} to ${next}`, err);
+    }
+  }
   save();
 }
 
 function remove(id) {
+  const note = get(id);
+  if (note) {
+    try {
+      fs.unlinkSync(path.join(DIR, note.file));
+    } catch (_) { /* already gone */ }
+  }
   notes = all().filter((n) => n.id !== id);
   save();
 }
@@ -113,16 +259,59 @@ function saveNow() {
   flush();
 }
 
+/* ---------- watching the folder ---------- */
+
+/** Files we wrote ourselves, so our own saves do not look like outside edits. */
+const justWrote = new Map();
+const SETTLE_MS = 1200;
+
+/**
+ * Calls back when a note file changes underneath us.
+ *
+ * This is the point of keeping notes as files: edit one in Vim, or let Dropbox
+ * bring down a change from another machine, and the open note follows along.
+ * Our own writes are filtered out, or every keystroke would echo back.
+ */
+function watch(onChanged) {
+  let timer = null;
+  let watcher;
+  try {
+    watcher = fs.watch(DIR, (_event, filename) => {
+      if (!filename || filename.startsWith('.') || filename.endsWith('.tmp')) return;
+      const wrote = justWrote.get(filename);
+      if (wrote && Date.now() - wrote < SETTLE_MS) return;
+
+      // Editors save in bursts; wait for the dust to settle.
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const before = new Map(all().map((n) => [n.file, n.body]));
+        const after = reload();
+        const changed = after.filter((n) => before.get(n.file) !== n.body);
+        if (changed.length) onChanged(changed);
+      }, 150);
+    });
+  } catch (err) {
+    console.error('could not watch the notes folder', err);
+  }
+  return () => watcher && watcher.close();
+}
+
+/** Forget everything cached, so the next read comes from disk. */
+function reload() {
+  notes = null;
+  return all();
+}
+
 /* ---------- settings ---------- */
 
-const SETTINGS_FILE = path.join(path.dirname(FILE), 'settings.json');
-const DEFAULTS = { aiEnabled: false, aiModel: '' };
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+const SETTING_DEFAULTS = { aiEnabled: false, aiModel: '' };
 
 function settings() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+    return { ...SETTING_DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
   } catch (_) {
-    return { ...DEFAULTS };
+    return { ...SETTING_DEFAULTS };
   }
 }
 
@@ -130,11 +319,13 @@ function saveSettings(patch) {
   const next = { ...settings(), ...patch };
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2));
+    writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2));
   } catch (err) {
     console.error('failed to save settings', err);
   }
   return next;
 }
 
-module.exports = { all, get, upsert, remove, saveNow, settings, saveSettings };
+module.exports = {
+  all, get, upsert, remove, saveNow, reload, watch, settings, saveSettings, DIR,
+};

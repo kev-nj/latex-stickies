@@ -35,11 +35,12 @@ contextBridge.exposeInMainWorld('sticky', {
   ai: {
     settings: () => ipcRenderer.invoke('ai:settings'),
     complete: (payload) => ipcRenderer.invoke('ai:complete', payload),
+    toLatex: (payload) => ipcRenderer.invoke('ai:toLatex', payload),
   },
   on: (channel, fn) => {
     const allowed = [
       'toggle-edit', 'request-delete', 'font-size', 'always-on-top-changed',
-      'copy-note-image', 'ai-settings-changed',
+      'copy-note-image', 'ai-settings-changed', 'note-changed', 'find-in-note', 'describe-latex',
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, payload) => fn(payload));
