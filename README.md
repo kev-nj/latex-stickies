@@ -21,7 +21,8 @@ give it a minute; later launches are instant.
 
 ## Writing in a note
 
-Click a note to edit it, click away to render. `Esc` also leaves edit mode.
+Everything renders as you type. Click into a line to see the markdown behind
+it; move away and it renders again.
 
 **Math** — `$…$` inline, `$$…$$` on its own line. Delimiters have to hug their
 content, so ordinary prose like `costs $5 and $6` stays text rather than turning

@@ -106,180 +106,188 @@ body.editing #tools > * { visibility: visible; }
   overflow: auto;
 }
 
-#editor, #preview {
-  width: 100%;
+#host {
   min-height: 100%;
-  padding: 10px 13px 22px;
+  font-size: var(--fs, 15px);
+}
+
+/* ---- CodeMirror ---- */
+
+.cm-editor { background: transparent; height: auto; }
+.cm-editor.cm-focused { outline: none; }
+/* CodeMirror injects its own stylesheet when the view is created, which is
+   after this file loads, so its base theme wins on equal specificity. These
+   rules are scoped one level deeper to beat it -- otherwise the whole note
+   renders in CodeMirror's default monospace, prose included. */
+.cm-editor .cm-scroller {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: var(--fs, 15px);
   line-height: 1.55;
-  user-select: text;
+  /* #surface is the only scroller. Nested scrollers left CodeMirror computing
+     its viewport against its own clipped box, so growing the window to
+     screenshot a long note revealed nothing new. */
+  overflow: visible;
 }
-
-#editor {
-  position: absolute;
-  inset: 0;
-  display: none;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
+.cm-editor .cm-content {
+  padding: 10px 12px 22px;
+  caret-color: var(--ink);
   color: var(--ink);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: calc(var(--fs, 15px) - 1px);
+}
+.cm-editor .cm-line { padding: 0; }
+.cm-cursor { border-left-color: var(--ink); }
+.cm-selectionBackground,
+.cm-editor ::selection { background: rgba(0, 0, 0, 0.14) !important; }
+.cm-gutters { display: none; }
+
+/* Blocks keep their markdown text and are styled in place -- far cheaper than
+   rebuilding them as HTML, and every character stays editable where it is. */
+.cm-md-h1 { font-size: 1.35em; font-weight: 600; }
+.cm-md-h2 { font-size: 1.18em; font-weight: 600; }
+.cm-md-h3 { font-size: 1.05em; font-weight: 600; }
+.cm-md-h4, .cm-md-h5, .cm-md-h6 { font-weight: 600; }
+
+.cm-md-quote {
+  border-left: 2px solid rgba(0, 0, 0, 0.22);
+  padding-left: 0.7em;
+  opacity: 0.85;
 }
 
-body.editing #editor { display: block; }
-body.editing #preview { visibility: hidden; }
+.cm-editor .cm-md-table {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.04);
+}
 
-#preview { word-break: break-word; }
-#preview > *:first-child { margin-top: 0; }
-#preview > *:last-child { margin-bottom: 0; }
-#preview p { margin: 0 0 0.55em; }
-#preview h1 { font-size: 1.35em; margin: 0.2em 0 0.3em; }
-#preview h2 { font-size: 1.18em; margin: 0.2em 0 0.3em; }
-#preview h3 { font-size: 1.05em; margin: 0.2em 0 0.3em; }
-#preview code {
+.cm-editor .cm-md-code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.86em;
+  background: rgba(0, 0, 0, 0.07);
+  /* Negative margin pulls the tint just past the text, then padding puts the
+     code back where it was -- so the block reads as a panel with breathing
+     room, without the tint running into the window edge. */
+  margin: 0 2px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* The language name is a label, not a keyword: the default highlight style
+   colours it like code. */
+.cm-editor .cm-code-lang {
+  color: var(--ink) !important;
+  opacity: 0.45;
+  font-size: 0.9em;
+}
+/* The fence lines lose their backticks, so round the block off at both ends
+   rather than leaving two bare stripes. */
+.cm-editor .cm-md-code-first {
+  border-radius: 5px 5px 0 0;
+  padding-top: 5px;
+}
+.cm-editor .cm-md-code-last {
+  border-radius: 0 0 5px 5px;
+  padding-bottom: 5px;
+}
+
+/* Sits at the end of a block's opening fence line, beside the language name. */
+.cm-editor .cm-copy {
+  float: right;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  margin-right: 2px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--ink);
+  cursor: default;
+  transition: opacity 0.12s ease;
+
+  /* Always visible, just quiet. CodeMirror renders each line as its own
+     element with nothing wrapping the block, so there is no "hovering the
+     code block" to hang a reveal on -- keying it to the fence line alone made
+     the button findable only by someone who already knew it was there. */
+  opacity: 0.4;
+}
+.cm-editor .cm-md-code-first:hover .cm-copy { opacity: 0.75; }
+.cm-editor .cm-copy:hover { opacity: 1; background: rgba(0, 0, 0, 0.16); }
+.cm-editor .cm-copy.done { opacity: 1; background: rgba(47, 107, 74, 0.22); }
+
+.cm-editor .cm-table {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.93em;
+  max-width: 100%;
+}
+.cm-editor .cm-table th,
+.cm-editor .cm-table td {
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  padding: 3px 7px;
+}
+.cm-editor .cm-table th {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+
+.cm-editor .cm-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-editor .cm-link:hover { opacity: 0.7; }
+
+.cm-editor .cm-inline-code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.88em;
   background: rgba(0, 0, 0, 0.07);
   padding: 1px 4px;
   border-radius: 3px;
 }
-#preview a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
-#preview h4, #preview h5, #preview h6 { font-size: 1em; margin: 0.2em 0 0.3em; }
+.cm-bullet { opacity: 0.55; padding-right: 0.15em; }
+.cm-task { opacity: 0.75; padding-right: 0.2em; }
+.cm-task-done { opacity: 0.5; }
 
-#preview blockquote {
-  margin: 0.4em 0;
-  padding-left: 0.7em;
-  border-left: 2px solid rgba(0, 0, 0, 0.22);
-  opacity: 0.85;
+.cm-rule {
+  display: inline-block;
+  width: 100%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.22);
+  vertical-align: middle;
 }
 
-/* The wrapper anchors the label and copy button; the <pre> inside it scrolls,
-   so anything positioned against the <pre> would scroll out of view. */
-#preview .code-block { position: relative; margin: 0.5em 0; }
-
-#preview pre {
-  margin: 0;
-  padding: 7px 9px;
-  background: rgba(0, 0, 0, 0.07);
-  border-radius: 5px;
-  overflow-x: auto;
-}
-#preview pre code { background: none; padding: 0; font-size: 0.85em; }
-
-/* Label and button share the top-right slot and cross-fade, so reaching for
-   Copy doesn't shift anything. */
-#preview .code-lang,
-#preview .code-copy {
-  position: absolute;
-  top: 4px;
-  right: 6px;
+.cm-math-error {
+  color: #a01f1f;
   font-family: ui-monospace, Menlo, monospace;
-  font-size: 10px;
-  letter-spacing: 0.02em;
-  transition: opacity 0.12s ease;
+  font-size: 0.85em;
+  text-decoration: underline wavy rgba(160, 31, 31, 0.5);
 }
 
-#preview .code-lang {
-  color: var(--ink);
-  opacity: 0.34;
-  pointer-events: none;
-}
+.katex-display { margin: 0.4em 0; }
 
-#preview .code-copy {
-  border: 0;
-  border-radius: 3px;
-  padding: 2px 6px;
-  background: rgba(0, 0, 0, 0.1);
-  color: var(--ink);
-  opacity: 0;
-  cursor: default;
-}
-#preview .code-block:hover .code-lang { opacity: 0; }
-#preview .code-block:hover .code-copy { opacity: 0.62; }
-#preview .code-copy:hover { opacity: 1; background: rgba(0, 0, 0, 0.16); }
-#preview .code-copy.done { opacity: 1; background: rgba(47, 107, 74, 0.2); }
-
-/* Syntax colors.
-   Notes come in six pastel papers, so every token is dark and desaturated --
-   a stock editor theme assumes one fixed background and washes out on yellow
-   or pink. Contrast holds on all six. */
-#preview .token.comment,
-#preview .token.prolog,
-#preview .token.doctype,
-#preview .token.cdata { color: var(--ink); opacity: 0.5; font-style: italic; }
-
-#preview .token.punctuation { color: var(--ink); opacity: 0.62; }
-
-#preview .token.keyword,
-#preview .token.rule,
-#preview .token.important,
-#preview .token.atrule { color: #8a2f6b; font-weight: 500; }
-
-#preview .token.string,
-#preview .token.char,
-#preview .token.attr-value,
-#preview .token.regex { color: #1f6b3a; }
-
-#preview .token.number,
-#preview .token.boolean,
-#preview .token.constant,
-#preview .token.symbol { color: #a0522d; }
-
-#preview .token.function,
-#preview .token.class-name,
-#preview .token.tag { color: #1b3a6b; }
-
-#preview .token.property,
-#preview .token.attr-name,
-#preview .token.variable,
-#preview .token.parameter { color: #6b4a1f; }
-
-#preview .token.operator,
-#preview .token.entity,
-#preview .token.url { color: var(--ink); opacity: 0.78; }
-
-#preview .token.deleted { color: #a01f1f; }
-#preview .token.inserted { color: #1f6b3a; }
-#preview .token.italic { font-style: italic; }
-#preview .token.bold { font-weight: 600; }
-
-#preview ul, #preview ol { margin: 0.35em 0; padding-left: 1.35em; }
-#preview li { margin: 0.12em 0; }
-#preview li::marker { opacity: 0.55; }
-/* marked emits a bare <li> with a checkbox, no class, so match on content. */
-#preview li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.15em; }
-#preview li > input[type="checkbox"] { margin-right: 0.45em; vertical-align: baseline; }
-
-#preview hr {
-  border: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.18);
-  margin: 0.7em 0;
-}
-
-#preview table {
-  border-collapse: collapse;
-  margin: 0.5em 0;
-  font-size: 0.93em;
-  display: block;
-  overflow-x: auto;
-}
-#preview th, #preview td {
-  border: 1px solid rgba(0, 0, 0, 0.16);
-  padding: 3px 7px;
-  text-align: left;
-}
-#preview th { background: rgba(0, 0, 0, 0.05); }
-
-#preview del { opacity: 0.6; }
-#preview img { max-width: 100%; border-radius: 4px; }
-#preview .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
 /* Held for the instant the whole note is screenshotted: the hover toolbar and
    the scrollbar are chrome, not content, and neither belongs in the picture. */
 body.capturing-note #tools > * { visibility: hidden; }
 body.capturing-note ::-webkit-scrollbar { width: 0; height: 0; }
+body.capturing-note #surface { overflow: hidden; }
+
+/* An equation copied on its own gets a plain card: the paper colour has no
+   business in an image headed for Slack or an email. */
+.cm-math.capturing {
+  display: inline-block;
+  background: #ffffff;
+  color: #16181d;
+  padding: 10px 14px;
+  border-radius: 5px;
+}
+.cm-math[data-display="block"].capturing { display: block; }
+body.capturing-note .cm-math.capturing {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+::-webkit-scrollbar { width: 0; height: 0; }
 body.capturing-note #surface { overflow: hidden; }
 
 /* Belt and braces: whatever else is happening, an equation never wears the

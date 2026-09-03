@@ -156,22 +156,7 @@ function restoreNotes() {
   notes.forEach(openNote);
 }
 
-const WELCOME = [
-  '# Welcome to LaTeX Stickies',
-  '',
-  'Type math inline like $e^{i\\pi} + 1 = 0$, or on its own line:',
-  '',
-  '$$\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}$$',
-  '',
-  'Markdown works too:',
-  '',
-  '- **bold**, *italic*, `code`, ~~strikethrough~~',
-  '- [ ] task lists',
-  '- > blockquotes, tables, and fenced code blocks',
-  '',
-  'Click the note to edit, click outside to render.',
-  'Cmd+N new note · Cmd+E toggle edit · Cmd+T always on top',
-].join('\n');
+const { WELCOME } = require('./welcome');
 
 function buildMenu() {
   const template = [
@@ -438,28 +423,57 @@ async function copyImage(image) {
  * the capture and put straight back -- capped to the display, since a very long
  * note would otherwise ask for a window taller than the screen.
  */
-ipcMain.handle('note:copyNote', async (e, { contentHeight } = {}) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
-  if (!win) return null;
+/**
+ * Screenshots a whole note, however long it is.
+ *
+ * The note's own window cannot do this: macOS clamps a window to the display,
+ * and the editor only renders the lines it believes are on screen, so a note
+ * taller than the screen came out cut off. Instead the note is opened again in
+ * an offscreen window -- which has no such limit -- sized to its full content,
+ * and that is what gets photographed.
+ *
+ * The offscreen page is the same note.html loading the same note id, so the
+ * picture cannot drift from what the real window shows.
+ */
+ipcMain.handle('note:copyNote', async (e, { width } = {}) => {
+  const source = BrowserWindow.fromWebContents(e.sender);
+  const entry = [...windows.entries()].find(([, w]) => w === source);
+  if (!source || !entry) return null;
+  const noteId = entry[0];
 
-  const original = win.getBounds();
-  const { workArea } = screen.getDisplayMatching(original);
-  const wanted = Math.ceil(contentHeight || original.height);
-  const target = Math.min(Math.max(wanted, 80), workArea.height);
-  const grew = target > original.height;
+  const shot = new BrowserWindow({
+    width: width || source.getBounds().width,
+    height: 800, // resized once the page reports how tall it really is
+    show: false,
+    frame: false,
+    webPreferences: {
+      offscreen: true,
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      additionalArguments: [`--note-id=${noteId}`, '--snapshot'],
+    },
+  });
 
   try {
-    if (grew) {
-      win.setBounds({ ...original, height: target });
-      // Give the compositor a frame at the new size before capturing.
-      await new Promise((resolve) => setTimeout(resolve, 140));
-    }
-    if (!win.isFocused()) win.focus();
-    await copyImage(await win.webContents.capturePage());
+    const height = await new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('the note never reported its height')), 8000);
+      ipcMain.once('note:snapshotReady', (_event, reported) => {
+        clearTimeout(timer);
+        resolve(Math.ceil(reported) || 800);
+      });
+      shot.loadFile(path.join(__dirname, 'renderer', 'note.html')).catch(reject);
+    });
+
+    shot.setBounds({ ...shot.getBounds(), height });
+    // Let the editor fill in the lines the taller viewport now covers.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await copyImage(await shot.webContents.capturePage());
   } catch (err) {
     console.error('could not copy the note as an image', err);
   } finally {
-    if (grew) win.setBounds(original);
+    if (!shot.isDestroyed()) shot.destroy();
   }
   return null;
 });

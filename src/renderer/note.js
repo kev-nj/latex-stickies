@@ -4,82 +4,11 @@ const SWATCH = {
   pink: '#fbd2e2', purple: '#e2d6fb', gray: '#e6e6e6',
 };
 
-const editor = document.getElementById('editor');
-const preview = document.getElementById('preview');
+const host = document.getElementById('host');
 const pin = document.getElementById('pin');
 
 let note = null;
-
-/* ---------- rendering ---------- */
-
-// renderMarkdown() comes from markdown.js (marked + KaTeX + DOMPurify).
-function render(src) {
-  if (!src.trim()) {
-    preview.innerHTML = '<span class="placeholder">Empty note \u2014 click to write.</span>';
-    return;
-  }
-  renderInto(preview, src);
-  decorateCodeBlocks();
-}
-
-/**
- * Adds the language label and copy button to each code block.
- *
- * This runs after the HTML is in the DOM rather than inside the markdown
- * renderer on purpose: the sanitizer still forbids <button>, so text typed into
- * a note can never fake one. These are built with createElement, so they can
- * only ever come from here.
- */
-function decorateCodeBlocks() {
-  preview.querySelectorAll('pre').forEach((pre) => {
-    // The <pre> scrolls its own long lines, so an absolutely positioned label
-    // inside it would scroll out of view. The wrapper is the anchor instead.
-    const block = document.createElement('div');
-    block.className = 'code-block';
-    pre.parentNode.insertBefore(block, pre);
-    block.appendChild(pre);
-
-    const lang = pre.dataset.lang;
-    if (lang) {
-      const label = document.createElement('span');
-      label.className = 'code-lang';
-      label.textContent = lang;
-      block.appendChild(label);
-    }
-
-    const button = document.createElement('button');
-    button.className = 'code-copy';
-    button.textContent = 'Copy';
-    button.title = 'Copy to clipboard';
-    block.appendChild(button);
-  });
-}
-
-let copyResetTimer = null;
-
-// Delegated so it keeps working across re-renders, which replace these nodes.
-preview.addEventListener('mousedown', (e) => {
-  // Stop the paper's own handler below from flipping the note into edit mode.
-  if (e.target.closest('.code-copy')) e.stopPropagation();
-}, true);
-
-preview.addEventListener('click', (e) => {
-  const button = e.target.closest('.code-copy');
-  if (!button) return;
-  e.preventDefault();
-  e.stopPropagation();
-
-  const code = button.closest('.code-block').querySelector('code');
-  window.sticky.copy(code.textContent);
-
-  button.textContent = 'Copied';
-  button.classList.add('done');
-  clearTimeout(copyResetTimer);
-  copyResetTimer = setTimeout(() => {
-    button.textContent = 'Copy';
-    button.classList.remove('done');
-  }, 1200);
-});
+let view = null;
 
 /* ---------- state ---------- */
 
@@ -89,27 +18,16 @@ function scheduleSave() {
   saveTimer = setTimeout(() => window.sticky.update({ body: note.body }), 250);
 }
 
-// Typing is saved on a 250ms debounce, which Cmd+W would otherwise outrun: the
-// window is closed from the main process, so the textarea never blurs and the
-// pending timer dies with the renderer, losing the last few words typed.
-// beforeunload is the last point where the renderer can still be heard.
+// Typing is saved on a debounce, which Cmd+W would otherwise outrun: the window
+// is closed from the main process, so the pending timer dies with the renderer
+// and the last few words typed are lost. beforeunload is the last point the
+// renderer can still be heard, and the flush is synchronous for that reason.
 window.addEventListener('beforeunload', () => {
   if (!note) return;
   clearTimeout(saveTimer);
-  if (document.body.classList.contains('editing')) note.body = editor.value;
+  if (view) note.body = view.state.doc.toString();
   window.sticky.flush(note.body);
 });
-
-function setEditing(on) {
-  document.body.classList.toggle('editing', on);
-  if (on) {
-    editor.focus();
-  } else {
-    render(note.body);
-    clearTimeout(saveTimer);
-    window.sticky.update({ body: note.body });
-  }
-}
 
 function setColor(color) {
   note.color = color;
@@ -132,86 +50,49 @@ function setPinned(on) {
   window.sticky.update({ alwaysOnTop: on });
 }
 
-/* ---------- wiring ---------- */
+// Keeps the toolbar up whenever this note is the focused window. The title bar
+// is a drag region and swallows mouse events, so CSS :hover alone would hide
+// the controls just as the cursor reached them.
+function setFocused(on) {
+  document.body.classList.toggle('focused', on);
+}
+window.addEventListener('focus', () => setFocused(true));
+window.addEventListener('blur', () => setFocused(false));
+setFocused(document.hasFocus());
 
-const swatches = document.getElementById('swatches');
-COLORS.forEach((color) => {
-  const el = document.createElement('span');
-  el.dataset.color = color;
-  el.style.background = SWATCH[color];
-  el.title = color;
-  el.addEventListener('click', () => setColor(color));
-  swatches.appendChild(el);
-});
-
-attachEditorBehaviors(editor);
-
-editor.addEventListener('input', () => {
-  note.body = editor.value;
-  scheduleSave();
-});
-editor.addEventListener('blur', () => setEditing(false));
-
-// Clicking the paper enters editing, but links and checkboxes act first.
-preview.addEventListener('mousedown', (e) => {
-  // Primary button only. A right-click (or two-finger tap) also fires
-  // mousedown, and switching to the editor here would tear the preview down
-  // before the contextmenu event could reach the equation under the cursor.
-  if (e.button !== 0) return;
-  if (e.target.closest('a')) return;
-  e.preventDefault();
-  setEditing(true);
-});
+/* ---------- images ---------- */
 
 /**
  * Screenshots the whole note to the clipboard.
  *
- * Three things have to be true before the shot is taken: the note is showing
- * its rendered form rather than raw markdown, the hover toolbar is out of
- * frame, and the main process knows how tall the content actually is so a
- * scrolled note is not captured half-missing.
+ * Snapshot mode renders every element as a reader would see it, including the
+ * one the caret happens to sit in -- a picture of a note should not show its
+ * markdown. The toolbar is hidden for the same reason, and the content height
+ * is measured so a scrolled note is not captured half-missing.
  */
 async function copyNoteAsImage() {
-  if (document.body.classList.contains('editing')) setEditing(false);
-
-  // An equation right-clicked a moment ago is still wearing the white card
-  // meant for capturing it alone. Reaching "Copy Note as Image" from that same
-  // menu would otherwise bake the card into the picture of the note.
-  preview.querySelectorAll('.capturing')
-    .forEach((el) => el.classList.remove('capturing'));
-
-  document.body.classList.add('capturing-note');
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-  const bar = document.getElementById('bar');
-  const contentHeight = bar.offsetHeight + preview.scrollHeight;
-  try {
-    await window.sticky.copyNote({ contentHeight });
-  } finally {
-    document.body.classList.remove('capturing-note');
-  }
+  // The picture is taken in a separate offscreen window, so this one is left
+  // exactly as it was -- no resize, no flicker, no toolbar to hide.
+  await window.sticky.copyNote({ width: window.innerWidth });
 }
 
 window.sticky.on('copy-note-image', copyNoteAsImage);
 
-// Right-click an equation to copy it as an image or as its LaTeX source.
-preview.addEventListener('contextmenu', async (e) => {
-  const slot = e.target.closest('[data-math]');
+// Right-click a rendered equation to copy it as an image or as LaTeX.
+host.addEventListener('contextmenu', async (e) => {
+  const slot = e.target.closest('[data-tex]');
+  e.preventDefault();
+
   if (!slot) {
-    // Away from an equation the menu still offers the whole note.
-    e.preventDefault();
-    window.sticky.mathMenu({});
+    window.sticky.mathMenu({}); // still offers the whole-note capture
     return;
   }
-  e.preventDefault();
-  e.stopPropagation();
 
-  // The note's paper colour would end up baked into the screenshot, so give the
-  // equation a plain light card for the moment of capture. Two frames, because
-  // the rectangle has to be measured after the padding is applied.
+  // The note's paper colour has no business in an image headed for Slack, so
+  // the equation gets a plain card for the moment of capture. Two frames,
+  // because the rectangle has to be measured after the padding lands.
   slot.classList.add('capturing');
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
   const box = slot.getBoundingClientRect();
   try {
     await window.sticky.mathMenu({
@@ -224,11 +105,23 @@ preview.addEventListener('contextmenu', async (e) => {
 });
 
 // Links open in the real browser rather than navigating the sticky itself.
-preview.addEventListener('click', (e) => {
+host.addEventListener('click', (e) => {
   const link = e.target.closest('a');
   if (!link) return;
   e.preventDefault();
   window.sticky.openExternal(link.href);
+});
+
+/* ---------- toolbar ---------- */
+
+const swatches = document.getElementById('swatches');
+COLORS.forEach((color) => {
+  const el = document.createElement('span');
+  el.dataset.color = color;
+  el.style.background = SWATCH[color];
+  el.title = color;
+  el.addEventListener('click', () => setColor(color));
+  swatches.appendChild(el);
 });
 
 document.getElementById('add').addEventListener('click', () => window.sticky.create());
@@ -239,22 +132,6 @@ pin.addEventListener('click', () => {
   setPinned(next);
 });
 
-// Keeps the toolbar up whenever this note is the focused window. The title bar
-// is a drag region and swallows mouse events, so CSS :hover alone would hide
-// the controls just as the cursor reached them.
-function setFocused(on) {
-  document.body.classList.toggle('focused', on);
-}
-window.addEventListener('focus', () => setFocused(true));
-window.addEventListener('blur', () => setFocused(false));
-setFocused(document.hasFocus());
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.body.classList.contains('editing')) setEditing(false);
-});
-
-window.sticky.on('toggle-edit', () =>
-  setEditing(!document.body.classList.contains('editing')));
 window.sticky.on('font-size', (delta) => setFontSize(note.fontSize + delta));
 window.sticky.on('always-on-top-changed', (v) => setPinned(v));
 window.sticky.on('request-delete', () => {
@@ -262,13 +139,43 @@ window.sticky.on('request-delete', () => {
     window.sticky.remove();
   }
 });
+// Kept for the menu item, though there are no longer two modes to toggle.
+window.sticky.on('toggle-edit', () => view && view.focus());
+
+/* ---------- start ---------- */
 
 window.sticky.get().then((loaded) => {
   note = loaded || { body: '', color: 'yellow', fontSize: 15, alwaysOnTop: false };
-  editor.value = note.body;
   setColor(note.color);
   setFontSize(note.fontSize || 15);
   setPinned(!!note.alwaysOnTop);
-  render(note.body);
-  if (!note.body) setEditing(true);
+
+  view = createLiveEditor({
+    parent: host,
+    doc: note.body,
+    onChange: (text) => {
+      note.body = text;
+      scheduleSave();
+    },
+  });
+
+  // In the offscreen window used to photograph the note, render everything as
+  // a reader sees it, measure how tall that is, and let the main process take
+  // it from there. No caret, no focus, nothing unfolded.
+  if (window.sticky.isSnapshot) {
+    document.body.classList.add('capturing-note');
+    // Left on for good: this window exists only to be photographed.
+    setSnapshotMode(view, true);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const bar = document.getElementById('bar');
+      window.sticky.snapshotReady(bar.offsetHeight + host.scrollHeight + 8);
+    }));
+    return;
+  }
+
+  // Caret at the end, not the start. At position 0 the caret sits inside the
+  // heading, which unfolds it -- so every note would open showing "# " before
+  // its title.
+  view.dispatch({ selection: { anchor: view.state.doc.length } });
+  view.focus();
 });

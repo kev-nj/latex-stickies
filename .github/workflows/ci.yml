@@ -60,3 +60,22 @@ jobs:
       - name: Window lifecycle
         if: runner.os != 'Linux'
         run: node scripts/smoke.js --lifecycle
+
+      # The unit suites cannot see CodeMirror; this checks that live preview
+      # actually rendered on this platform.
+      - name: Live preview renders (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/render-check.js
+
+      - name: Live preview renders
+        if: runner.os != 'Linux'
+        run: node scripts/render-check.js
+
+      # A note longer than the screen must still be photographed whole.
+      - name: Full-note capture (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/snapshot-check.js
+
+      - name: Full-note capture
+        if: runner.os != 'Linux'
+        run: node scripts/snapshot-check.js
