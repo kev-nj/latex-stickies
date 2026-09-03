@@ -1,25 +1,30 @@
 #!/usr/bin/env node
 /**
- * Boots the real app and checks it is still alive a few seconds later.
+ * Boots the real app and checks it behaves, on whatever platform CI is running.
  *
- * The unit suites cover the pure logic, but they never start Electron. This is
- * the check that the app actually opens a window on a machine that is not the
- * author's -- the whole point of running it on Windows and Linux, where nobody
- * has ever launched it.
+ * The unit suites cover the pure logic but never start Electron, so everything
+ * platform-shaped lives here.
  *
- * "Still running after N seconds" is a deliberately low bar, and the right one:
- * almost every way this breaks on a new platform (a missing module, a bad path,
- * an API that does not exist there) shows up as an immediate crash, and the
- * stderr is captured and printed when it does.
+ *   node scripts/smoke.js              boot and stay up
+ *   node scripts/smoke.js --package    boot the installed latex-stickies
+ *   node scripts/smoke.js --lifecycle  close every note, check what happens next
  *
- *   node scripts/smoke.js            # boot the app in this repo
- *   node scripts/smoke.js --package  # boot the installed latex-stickies
+ * The lifecycle mode exists because of a real bug: closing the last note on
+ * Windows left the process running with no window and no way to reach it, and
+ * relaunching handed off to that instance and appeared to do nothing. A boot
+ * test cannot see that -- it never closes a window. The app cooperates through
+ * LATEX_STICKIES_SMOKE_CLOSE_MS, which is inert unless set.
  */
 const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 
 const ALIVE_MS = 12000;
+const CLOSE_AFTER_MS = 6000;
+const GRACE_MS = 8000;
+
 const usePackage = process.argv.includes('--package');
+const lifecycle = process.argv.includes('--lifecycle');
+const isMac = process.platform === 'darwin';
 
 let appDir;
 let electronPath;
@@ -37,56 +42,141 @@ try {
 
 console.log(`booting  ${appDir}`);
 console.log(`electron ${electronPath}`);
+console.log(`mode     ${lifecycle ? 'lifecycle' : 'boot'}`);
 
-const args = [appDir];
 // CI containers run as root without a usable sandbox; this is a test harness,
 // not how end users launch the app.
-if (process.platform === 'linux') args.push('--no-sandbox');
+const args = process.platform === 'linux' ? [appDir, '--no-sandbox'] : [appDir];
 
-const child = spawn(electronPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+// Chromium is noisy on a headless runner -- D-Bus, GPU and font warnings are
+// printed on every Linux boot and say nothing about whether the app works.
+// Only match what actually means the app failed.
+const FATAL = [
+  /Cannot find module/i,
+  /A JavaScript error occurred in the main process/i,
+  /Uncaught (Exception|TypeError|ReferenceError|SyntaxError)/i,
+  /^\s*at .*[\\/]src[\\/].*\.js/m, // a stack trace through our own code
+];
 
-let out = '';
-child.stdout.on('data', (d) => { out += d; process.stdout.write(d); });
-child.stderr.on('data', (d) => { out += d; process.stderr.write(d); });
-
-let exitedEarly = null;
-child.on('exit', (code, signal) => { exitedEarly = { code, signal }; });
-child.on('error', (err) => {
-  console.error(`failed to spawn Electron: ${err.message}`);
-  process.exit(1);
-});
-
-setTimeout(() => {
-  if (exitedEarly) {
-    console.error(
-      `\nFAIL  app exited after ${ALIVE_MS / 1000}s ` +
-      `(code=${exitedEarly.code} signal=${exitedEarly.signal})`
-    );
+function launch(env = {}) {
+  const child = spawn(electronPath, args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, ...env },
+  });
+  const state = { out: '', exited: null, child };
+  const record = (d) => { state.out += d; process.stdout.write(d); };
+  child.stdout.on('data', record);
+  child.stderr.on('data', record);
+  child.on('exit', (code, signal) => { state.exited = { code, signal }; });
+  child.on('error', (err) => {
+    console.error(`failed to spawn Electron: ${err.message}`);
     process.exit(1);
-  }
+  });
+  return state;
+}
 
-  // Electron spawns helper processes; kill the group so none are left behind.
+function kill(child) {
+  // Electron spawns helper processes; take the tree so none are left behind.
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
   } else {
     child.kill('SIGTERM');
   }
+}
 
-  // Only fatal, app-level failures count. Chromium is noisy on a headless
-  // runner -- D-Bus, GPU and font warnings are printed on every Linux boot and
-  // say nothing about whether the app works.
-  const FATAL = [
-    /Cannot find module/i,
-    /A JavaScript error occurred in the main process/i,
-    /Uncaught (Exception|TypeError|ReferenceError|SyntaxError)/i,
-    /^\s*at .*[\\/]src[\\/].*\.js/m, // a stack trace through our own code
-  ];
-  const fatal = FATAL.find((re) => re.test(out));
-  if (fatal) {
-    console.error(`\nFAIL  app reported a fatal error (matched ${fatal})`);
-    process.exit(1);
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Resolves true as soon as `test` passes, false if `ms` elapses first. */
+async function until(test, ms) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (test()) return true;
+    await wait(250);
+  }
+  return false;
+}
+
+function fail(message, state) {
+  console.error(`\nFAIL  ${message}`);
+  if (state && state.child && !state.exited) kill(state.child);
+  process.exit(1);
+}
+
+function checkFatal(state) {
+  const hit = FATAL.find((re) => re.test(state.out));
+  if (hit) fail(`app reported a fatal error (matched ${hit})`, state);
+}
+
+/** Window count from the most recent SMOKE line the app printed. */
+function windowCount(out) {
+  const seen = [...out.matchAll(/SMOKE windows=(\d+)/g)];
+  return seen.length ? Number(seen[seen.length - 1][1]) : null;
+}
+
+async function bootMode() {
+  const app = launch();
+  await wait(ALIVE_MS);
+  if (app.exited) {
+    fail(
+      `app exited after ${ALIVE_MS / 1000}s ` +
+      `(code=${app.exited.code} signal=${app.exited.signal})`,
+      app
+    );
+  }
+  kill(app.child);
+  checkFatal(app);
+  console.log(`\nPASS  app stayed up for ${ALIVE_MS / 1000}s with no errors`);
+}
+
+async function lifecycleMode() {
+  const app = launch({ LATEX_STICKIES_SMOKE_CLOSE_MS: String(CLOSE_AFTER_MS) });
+
+  if (!(await until(() => windowCount(app.out) > 0, 30000))) {
+    fail('app never opened a note window', app);
+  }
+  if (!(await until(() => windowCount(app.out) === 0, 30000))) {
+    fail('notes never closed -- the test hook did not fire', app);
+  }
+  console.log('\n--- every note closed; checking what the app does next');
+
+  if (!isMac) {
+    // No Dock and no activate event: an app with no windows is unreachable
+    // here, so it has to quit rather than linger invisibly.
+    if (!(await until(() => app.exited, GRACE_MS))) {
+      fail(
+        'app kept running with no windows open. On this platform there is no ' +
+        'way back to it, and the next launch would hand off to this instance ' +
+        'and appear to do nothing.',
+        app
+      );
+    }
+    checkFatal(app);
+    console.log(`\nPASS  app quit after its last note closed (code=${app.exited.code})`);
+    return;
   }
 
-  console.log(`\nPASS  app stayed up for ${ALIVE_MS / 1000}s with no errors`);
-  process.exit(0);
-}, ALIVE_MS);
+  // macOS keeps the app alive on purpose -- the Dock icon is the way back.
+  await wait(GRACE_MS);
+  if (app.exited) {
+    fail('app quit when its last note closed; on macOS it should stay running', app);
+  }
+
+  // ...and a second launch must reopen the notes rather than hand off to an
+  // instance that shows nothing.
+  console.log('--- relaunching; the running instance should reopen its notes');
+  const second = launch();
+  const reopened = await until(() => windowCount(app.out) > 0, 20000);
+  if (!second.exited) kill(second.child);
+  if (!reopened) {
+    fail('a second launch reopened no note -- the app is unreachable', app);
+  }
+
+  kill(app.child);
+  checkFatal(app);
+  console.log('\nPASS  app stayed up with no windows, and relaunching reopened its notes');
+}
+
+(lifecycle ? lifecycleMode() : bootMode()).catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

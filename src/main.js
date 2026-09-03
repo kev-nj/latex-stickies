@@ -16,6 +16,19 @@ const store = require('./store');
 
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 
+/**
+ * Test hook for scripts/smoke.js, inert unless the variable is set.
+ *
+ * What it enables is the ability to observe the window lifecycle from outside
+ * the app: how many notes are open, and closing them all on cue. That is the
+ * one thing CI could not reach, and the reason a Windows-only bug -- the app
+ * lingering with no windows and no way back -- shipped unnoticed.
+ */
+const SMOKE_CLOSE_MS = Number(process.env.LATEX_STICKIES_SMOKE_CLOSE_MS) || 0;
+const smokeLog = (message) => {
+  if (SMOKE_CLOSE_MS) console.log(`SMOKE ${message}`);
+};
+
 const COLORS = ['yellow', 'blue', 'green', 'pink', 'purple', 'gray'];
 
 /** noteId -> BrowserWindow */
@@ -94,7 +107,10 @@ function openNote(note) {
   };
   win.on('resize', persistBounds);
   win.on('move', persistBounds);
-  win.on('closed', () => windows.delete(note.id));
+  win.on('closed', () => {
+    windows.delete(note.id);
+    smokeLog(`windows=${windows.size}`);
+  });
 
   // Links inside a note open in the real browser, never inside the sticky.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -109,6 +125,7 @@ function openNote(note) {
   });
 
   windows.set(note.id, win);
+  smokeLog(`windows=${windows.size}`);
   return win;
 }
 
@@ -282,6 +299,13 @@ app.whenReady().then(() => {
 
   buildMenu();
   restoreNotes();
+
+  if (SMOKE_CLOSE_MS) {
+    setTimeout(() => {
+      smokeLog('closing every note');
+      [...windows.values()].forEach((win) => win.close());
+    }, SMOKE_CLOSE_MS);
+  }
 
   app.on('activate', surfaceNotes);
 });

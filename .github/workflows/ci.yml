@@ -49,3 +49,14 @@ jobs:
       - name: Boot the app
         if: runner.os != 'Linux'
         run: node scripts/smoke.js
+
+      # Closing every note behaves differently per platform, and a boot test
+      # cannot see it: macOS keeps the app alive, everywhere else it must quit
+      # rather than linger with no window and no way back.
+      - name: Window lifecycle (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke.js --lifecycle
+
+      - name: Window lifecycle
+        if: runner.os != 'Linux'
+        run: node scripts/smoke.js --lifecycle
