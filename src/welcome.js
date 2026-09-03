@@ -35,7 +35,7 @@ const WELCOME = [
   '',
   '## Shortcuts',
   '',
-  'Cmd+N new · Cmd+W close · Cmd+Backspace delete',
+  'Cmd+N new · Cmd+W close · Cmd+Shift+Backspace delete',
   'Cmd+B bold · Cmd+I italic · Cmd+K link',
   'Cmd+T keep on top · Cmd+Shift+C copy note as image',
   '',

@@ -252,7 +252,8 @@ body.editing #tools > * { visibility: visible; }
 }
 
 .cm-bullet { opacity: 0.55; padding-right: 0.15em; }
-.cm-task { opacity: 0.75; padding-right: 0.2em; }
+.cm-task { opacity: 0.75; padding-right: 0.2em; cursor: pointer; }
+.cm-task:hover { opacity: 1; }
 .cm-task-done { opacity: 0.5; }
 
 .cm-rule {

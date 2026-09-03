@@ -36,6 +36,20 @@ app.whenReady().then(async () => {
   w.webContents.on('console-message', (_e, _l, m) => console.log('PAGE ' + m));
   await w.loadFile(${JSON.stringify(path.join(ROOT, 'src/renderer/note.html'))});
   await new Promise((r) => setTimeout(r, 2500));
+  // Click the checkbox and see whether the markdown actually flipped.
+  const ticked = await w.webContents.executeJavaScript(\`
+    (() => {
+      const box = document.querySelector('.cm-task');
+      if (!box) return 'no checkbox';
+      const view = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
+      const before = view.state.doc.toString();
+      box.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      const after = view.state.doc.toString();
+      return before.includes('- [ ]') && after.includes('- [x]') ? 'toggled' : 'unchanged';
+    })()
+  \`).catch((e) => 'error: ' + e.message);
+  console.log('PROBE_CLICK ' + ticked);
+
   console.log('PROBE ' + await w.webContents.executeJavaScript(\`JSON.stringify({
     editor: !!document.querySelector('.cm-editor'),
     math: document.querySelectorAll('.cm-math .katex').length,
@@ -83,10 +97,13 @@ child.on('exit', () => {
     process.exit(1);
   }
   const r = JSON.parse(line.slice(6));
+  const clickLine = out.split('\n').find((l) => l.startsWith('PROBE_CLICK '));
+  r.checkboxToggled = clickLine && clickLine.includes('toggled');
   const checks = [
     ['editor mounted', r.editor],
     ['maths rendered by KaTeX', r.math >= 2],
     ['task checkbox shown', r.task === 1],
+    ['clicking the checkbox ticks it', r.checkboxToggled === true],
     ['bullet shown, and not on the task item', r.bullet === 1],
     ['code block styled', r.code >= 3],
     ['heading styled', r.heading >= 1],

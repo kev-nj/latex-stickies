@@ -75,20 +75,39 @@ class MathWidget extends WidgetType {
 }
 
 class CheckboxWidget extends WidgetType {
-  constructor(checked) {
+  constructor(checked, from, to) {
     super();
     this.checked = checked;
+    this.from = from;
+    this.to = to;
   }
 
+  // Position is part of identity: without it CodeMirror reuses a widget whose
+  // stored range has moved, and the click then edits the wrong characters.
   eq(other) {
-    return other.checked === this.checked;
+    return other.checked === this.checked
+      && other.from === this.from && other.to === this.to;
   }
 
-  toDOM() {
+  toDOM(view) {
     const box = document.createElement('span');
     box.className = `cm-task${this.checked ? ' cm-task-done' : ''}`;
     box.textContent = this.checked ? '☑' : '☐';
+    box.title = 'Click to tick';
+    box.addEventListener('mousedown', (e) => {
+      // Otherwise CodeMirror takes the click as "put the caret here", which
+      // unfolds the marker back to source instead of ticking it.
+      e.preventDefault();
+      e.stopPropagation();
+      view.dispatch({
+        changes: { from: this.from, to: this.to, insert: this.checked ? '[ ]' : '[x]' },
+      });
+    });
     return box;
+  }
+
+  ignoreEvent() {
+    return true; // it is a control, not text
   }
 }
 
@@ -454,7 +473,9 @@ function buildDecorations(state) {
           ranges.push({
             from: node.from,
             to: node.to,
-            value: Decoration.replace({ widget: new CheckboxWidget(checked) }),
+            value: Decoration.replace({
+              widget: new CheckboxWidget(checked, node.from, node.to),
+            }),
           });
         }
         return;

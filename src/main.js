@@ -204,7 +204,11 @@ async function buildMenu() {
         { type: 'separator' },
         {
           label: 'Delete Note',
-          accelerator: 'CmdOrCtrl+Backspace',
+          // Not Cmd+Backspace: that is "delete to start of line" in every
+          // macOS text field, and CodeMirror binds it too -- so the editor ate
+          // the key, and had it not, reaching for a normal editing shortcut
+          // would have destroyed a note with no undo.
+          accelerator: 'CmdOrCtrl+Shift+Backspace',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             if (win) win.webContents.send('request-delete');

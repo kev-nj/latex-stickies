@@ -60,7 +60,7 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 |---|---|
 | `Cmd+N` | New note |
 | `Cmd+W` | Close note |
-| `Cmd+Backspace` | Delete note |
+| `Cmd+Shift+Backspace` | Delete note |
 | `Cmd+E` | Toggle edit / preview |
 | `Cmd+T` | Keep on top |
 | `Cmd+±` | Text size |
