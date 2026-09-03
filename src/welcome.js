@@ -39,7 +39,7 @@ const WELCOME = [
   'Cmd+B bold · Cmd+I italic · Cmd+K link',
   'Cmd+T keep on top · Cmd+Shift+C copy note as image',
   '',
-  'Notes save themselves. Delete this one when you are done with it.',
+  'Notes save themselves. [Source and issues](https://github.com/kev-nj/latex-stickies).',
 ].join('\n');
 
 module.exports = { WELCOME };

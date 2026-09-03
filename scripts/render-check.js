@@ -57,6 +57,7 @@ app.whenReady().then(async () => {
     ).textDecorationLine,
     langLabel: document.querySelectorAll('.cm-code-lang').length,
     inlineCode: document.querySelectorAll('.cm-inline-code').length,
+    anchors: document.querySelectorAll('.cm-content a').length,
     inlineCodeBg: document.querySelector('.cm-inline-code')
       ? getComputedStyle(document.querySelector('.cm-inline-code')).backgroundColor : '',
     tableEl: document.querySelectorAll('table.cm-table').length,
@@ -102,6 +103,7 @@ child.on('exit', () => {
     ['headings are not underlined', !/underline/.test(r.headingUnderline || '')],
     ['language name tagged as a label', r.langLabel >= 1],
     ['inline code marked', r.inlineCode >= 1],
+    ['markdown link is a real anchor', r.anchors >= 1],
     ['inline code has a background chip', !/rgba\(0, 0, 0, 0\)/.test(r.inlineCodeBg)],
     ['table drawn as a real table', r.tableEl === 1],
     ['table has a header row', r.tableHeaders === 2],

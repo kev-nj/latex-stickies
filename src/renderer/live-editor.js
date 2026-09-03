@@ -216,6 +216,45 @@ function fillCell(cell, text) {
   if (last < text.length) cell.appendChild(document.createTextNode(text.slice(last)));
 }
 
+/**
+ * A markdown link, drawn as a real link.
+ *
+ * CodeMirror styles link text but never builds an anchor, so a link looked
+ * like one and did nothing. Clicking opens the browser through the same bridge
+ * the old renderer used, which allows http and https only.
+ */
+class LinkWidget extends WidgetType {
+  constructor(label, url) {
+    super();
+    this.label = label;
+    this.url = url;
+  }
+
+  eq(other) {
+    return other.label === this.label && other.url === this.url;
+  }
+
+  toDOM() {
+    const anchor = document.createElement('a');
+    anchor.className = 'cm-link';
+    anchor.textContent = this.label;
+    anchor.href = this.url;
+    anchor.title = this.url;
+    anchor.addEventListener('mousedown', (e) => {
+      // Without this CodeMirror takes the click and puts the caret here,
+      // unfolding the link instead of following it.
+      e.preventDefault();
+      e.stopPropagation();
+      window.sticky.openExternal(this.url);
+    });
+    return anchor;
+  }
+
+  ignoreEvent() {
+    return true; // it is a link, not text
+  }
+}
+
 class RuleWidget extends WidgetType {
   eq() {
     return true;
@@ -333,6 +372,35 @@ function buildDecorations(state) {
               value: Decoration.widget({ widget: new CopyButtonWidget(body), side: 1 }),
             });
           }
+        }
+      }
+
+      // A whole link becomes an anchor, unless the caret is inside it.
+      if (node.name === 'Link' && !cursorInside(node.from, node.to)) {
+        const raw = state.doc.sliceString(node.from, node.to);
+        const parts = /^\[([^\]]*)\]\(([^)\s]+)[^)]*\)$/.exec(raw);
+        if (parts) {
+          ranges.push({
+            from: node.from,
+            to: node.to,
+            value: Decoration.replace({
+              widget: new LinkWidget(parts[1] || parts[2], parts[2]),
+            }),
+          });
+          return false; // its marks and text are inside the widget now
+        }
+      }
+
+      // A bare URL in the text is a link too.
+      if (node.name === 'URL' && !cursorInside(node.from, node.to)) {
+        const url = state.doc.sliceString(node.from, node.to);
+        if (/^https?:\/\//i.test(url)) {
+          ranges.push({
+            from: node.from,
+            to: node.to,
+            value: Decoration.replace({ widget: new LinkWidget(url, url) }),
+          });
+          return false;
         }
       }
 

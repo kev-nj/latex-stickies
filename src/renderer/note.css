@@ -228,6 +228,14 @@ body.editing #tools > * { visibility: visible; }
   font-weight: 600;
 }
 
+.cm-editor .cm-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-editor .cm-link:hover { opacity: 0.7; }
+
 .cm-editor .cm-inline-code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.88em;
