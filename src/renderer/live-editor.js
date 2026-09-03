@@ -336,6 +336,17 @@ function buildDecorations(state) {
         }
       }
 
+      // Inline code gets a chip, as the old renderer drew it. The mark spans
+      // the backticks too, but those are replaced away, so only the code shows.
+      if (node.name === 'InlineCode') {
+        ranges.push({
+          from: node.from,
+          to: node.to,
+          value: Decoration.mark({ class: 'cm-inline-code' }),
+        });
+        return;
+      }
+
       if (node.name === 'CodeInfo') {
         ranges.push({
           from: node.from,

@@ -56,6 +56,9 @@ app.whenReady().then(async () => {
       document.querySelector('.cm-md-h1 span') || document.querySelector('.cm-md-h1')
     ).textDecorationLine,
     langLabel: document.querySelectorAll('.cm-code-lang').length,
+    inlineCode: document.querySelectorAll('.cm-inline-code').length,
+    inlineCodeBg: document.querySelector('.cm-inline-code')
+      ? getComputedStyle(document.querySelector('.cm-inline-code')).backgroundColor : '',
     tableEl: document.querySelectorAll('table.cm-table').length,
     tableCells: document.querySelectorAll('.cm-table td').length,
     tableHeaders: document.querySelectorAll('.cm-table th').length,
@@ -98,6 +101,8 @@ child.on('exit', () => {
     ['content inset from the window edge', r.contentPad >= 8],
     ['headings are not underlined', !/underline/.test(r.headingUnderline || '')],
     ['language name tagged as a label', r.langLabel >= 1],
+    ['inline code marked', r.inlineCode >= 1],
+    ['inline code has a background chip', !/rgba\(0, 0, 0, 0\)/.test(r.inlineCodeBg)],
     ['table drawn as a real table', r.tableEl === 1],
     ['table has a header row', r.tableHeaders === 2],
     ['table has its body cells', r.tableCells === 4],

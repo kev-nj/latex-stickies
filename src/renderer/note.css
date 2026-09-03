@@ -228,6 +228,14 @@ body.editing #tools > * { visibility: visible; }
   font-weight: 600;
 }
 
+.cm-editor .cm-inline-code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.88em;
+  background: rgba(0, 0, 0, 0.07);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 .cm-bullet { opacity: 0.55; padding-right: 0.15em; }
 .cm-task { opacity: 0.75; padding-right: 0.2em; }
 .cm-task-done { opacity: 0.5; }
