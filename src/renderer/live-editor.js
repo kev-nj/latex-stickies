@@ -588,6 +588,7 @@ function createLiveEditor({ parent, doc, onChange }) {
         Prec.high(syntaxHighlighting(markdownStyle)),
         syntaxHighlighting(defaultHighlightStyle), // colours inside code fences
         livePreview,
+        ghostCompletion(),
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChange(update.state.doc.toString());

@@ -29,10 +29,17 @@ contextBridge.exposeInMainWorld('sticky', {
   flush: (body) => ipcRenderer.sendSync('note:flush', { id: noteId, body }),
   mathMenu: (payload) => ipcRenderer.invoke('note:mathMenu', payload),
   copyNote: (payload) => ipcRenderer.invoke('note:copyNote', payload),
+
+  // Optional, local-only autocomplete. Requests are made in the main process:
+  // this page cannot reach the network, and should not be able to.
+  ai: {
+    settings: () => ipcRenderer.invoke('ai:settings'),
+    complete: (payload) => ipcRenderer.invoke('ai:complete', payload),
+  },
   on: (channel, fn) => {
     const allowed = [
       'toggle-edit', 'request-delete', 'font-size', 'always-on-top-changed',
-      'copy-note-image',
+      'copy-note-image', 'ai-settings-changed',
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, payload) => fn(payload));

@@ -173,6 +173,11 @@ window.sticky.get().then((loaded) => {
     return;
   }
 
+  // Autocomplete is optional and off unless Ollama is answering, so this may
+  // simply resolve to disabled.
+  refreshGhostSettings();
+  window.sticky.on('ai-settings-changed', refreshGhostSettings);
+
   // Caret at the end, not the start. At position 0 the caret sits inside the
   // heading, which unfolds it -- so every note would open showing "# " before
   // its title.

@@ -1,4 +1,5 @@
 assets/
 test/
-scripts/
+scripts/*
+!scripts/brand-electron.js
 dist/

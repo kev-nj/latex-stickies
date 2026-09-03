@@ -236,6 +236,13 @@ body.editing #tools > * { visibility: visible; }
 }
 .cm-editor .cm-link:hover { opacity: 0.7; }
 
+/* A suggestion, not text: never dark enough to be mistaken for what you wrote. */
+.cm-editor .cm-ghost {
+  opacity: 0.42;
+  font-style: italic;
+  white-space: pre;
+}
+
 .cm-editor .cm-inline-code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.88em;

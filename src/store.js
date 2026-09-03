@@ -113,4 +113,28 @@ function saveNow() {
   flush();
 }
 
-module.exports = { all, get, upsert, remove, saveNow };
+/* ---------- settings ---------- */
+
+const SETTINGS_FILE = path.join(path.dirname(FILE), 'settings.json');
+const DEFAULTS = { aiEnabled: false, aiModel: '' };
+
+function settings() {
+  try {
+    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+  } catch (_) {
+    return { ...DEFAULTS };
+  }
+}
+
+function saveSettings(patch) {
+  const next = { ...settings(), ...patch };
+  try {
+    fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2));
+  } catch (err) {
+    console.error('failed to save settings', err);
+  }
+  return next;
+}
+
+module.exports = { all, get, upsert, remove, saveNow, settings, saveSettings };

@@ -1,5 +1,5 @@
 const {
-  app, BrowserWindow, ipcMain, Menu, clipboard, ClipboardItem, screen, shell,
+  app, BrowserWindow, dialog, ipcMain, Menu, clipboard, ClipboardItem, screen, shell,
 } = require('electron');
 const path = require('path');
 
@@ -15,6 +15,7 @@ app.setPath('userData', path.join(app.getPath('appData'), 'latex-stickies'));
 
 // Required after the path is set: store.js resolves notes.json when it loads.
 const store = require('./store');
+const ai = require('./ai');
 
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 
@@ -158,7 +159,25 @@ function restoreNotes() {
 
 const { WELCOME } = require('./welcome');
 
-function buildMenu() {
+async function buildMenu() {
+  const saved = store.settings();
+  // Only ask Ollama when the feature is on: a cold check on every menu build
+  // would add a wait to startup for people who never enable it.
+  const { available, models } = saved.aiEnabled
+    ? await ai.status()
+    : { available: false, models: [] };
+
+  const modelItems = models.map((m) => ({
+    label: `${m.name}  (${(m.size / 1e9).toFixed(1)} GB)`,
+    type: 'radio',
+    checked: m.name === saved.aiModel,
+    click: () => {
+      store.saveSettings({ aiModel: m.name });
+      buildMenu();
+      windows.forEach((w) => w.webContents.send('ai-settings-changed'));
+    },
+  }));
+
   const template = [
     {
       label: app.name,
@@ -200,6 +219,46 @@ function buildMenu() {
           accelerator: 'CmdOrCtrl+E',
           click: () => BrowserWindow.getFocusedWindow()?.webContents.send('toggle-edit'),
         },
+        {
+          label: 'Autocomplete (Ollama)',
+          type: 'checkbox',
+          checked: saved.aiEnabled,
+          click: async (item) => {
+            if (!item.checked) {
+              store.saveSettings({ aiEnabled: false });
+            } else {
+              const found = await ai.status();
+              if (!found.available || !found.models.length) {
+                item.checked = false;
+                dialog.showMessageBox({
+                  type: 'info',
+                  message: 'Ollama is not running',
+                  detail: 'Autocomplete runs entirely on this machine through '
+                    + `Ollama, which was not reachable at ${ai.HOST}.\n\n`
+                    + 'Start it with "ollama serve", or install it from '
+                    + 'ollama.com and pull a model:\n    ollama pull qwen2.5-coder:1.5b',
+                  buttons: ['OK'],
+                });
+                return;
+              }
+              store.saveSettings({
+                aiEnabled: true,
+                aiModel: saved.aiModel || ai.pickDefault(found.models),
+              });
+            }
+            await buildMenu(); // the model list only appears once it is on
+            windows.forEach((w) => w.webContents.send('ai-settings-changed'));
+          },
+        },
+        {
+          label: 'Autocomplete Model',
+          // Populated once autocomplete is on and Ollama has answered.
+          submenu: modelItems.length
+            ? modelItems
+            : [{ label: available ? 'No usable models' : 'Turn on autocomplete first',
+                 enabled: false }],
+        },
+        { type: 'separator' },
         {
           label: 'Copy Note as Image',
           accelerator: 'CmdOrCtrl+Shift+C',
@@ -280,7 +339,7 @@ function surfaceNotes() {
 
 app.on('second-instance', surfaceNotes);
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Run from npm there is no .app bundle to carry the icon, so macOS would show
   // the generic Electron atom in the Dock. Set it explicitly.
   if (process.platform === 'darwin' && app.dock) {
@@ -291,7 +350,7 @@ app.whenReady().then(() => {
     }
   }
 
-  buildMenu();
+  await buildMenu();
   restoreNotes();
 
   if (SMOKE_CLOSE_MS) {
@@ -402,6 +461,30 @@ ipcMain.handle('note:mathMenu', (e, { rect, tex } = {}) => {
 ipcMain.handle('note:openExternal', (_e, url) => openExternal(url));
 
 ipcMain.handle('note:copyText', (_e, text) => clipboard.writeText(String(text)));
+
+/**
+ * Whether autocomplete is on, and with which model.
+ *
+ * Off unless Ollama is actually answering: the feature is optional, and a
+ * setting that promises something the machine cannot do is worse than no
+ * setting at all.
+ */
+ipcMain.handle('ai:settings', async () => {
+  const saved = store.settings();
+  if (!saved.aiEnabled) return { enabled: false };
+
+  const { available, models } = await ai.status();
+  if (!available || !models.length) return { enabled: false, reason: 'ollama-unreachable' };
+
+  // models are { name, size } objects; the setting is a name. Fall back to a
+  // sensible pick if the chosen model has been removed.
+  const names = models.map((m) => m.name);
+  const model = names.includes(saved.aiModel) ? saved.aiModel : ai.pickDefault(models);
+  if (model !== saved.aiModel) store.saveSettings({ aiModel: model });
+  return { enabled: true, model };
+});
+
+ipcMain.handle('ai:complete', (_e, payload) => ai.complete(payload || {}));
 
 /**
  * Puts a PNG on the clipboard.

@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('sticky', {
   remove: async () => {}, setAlwaysOnTop: async () => {}, close: async () => {},
   openExternal: () => {}, copy: async () => {}, mathMenu: async () => {},
   copyNote: async () => {}, on: () => {},
+  ai: { settings: async () => ({ enabled: false }), complete: async () => '' },
 });
