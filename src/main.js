@@ -1,6 +1,8 @@
 const {
-  app, BrowserWindow, dialog, ipcMain, Menu, clipboard, ClipboardItem, screen, shell,
+  app, BrowserWindow, dialog, ipcMain, Menu, clipboard, ClipboardItem,
+  nativeImage, screen, shell,
 } = require('electron');
+const fs = require('fs');
 const path = require('path');
 
 // Pin the identity before anything derives a path from it.
@@ -342,9 +344,13 @@ app.on('second-instance', surfaceNotes);
 app.whenReady().then(async () => {
   // Run from npm there is no .app bundle to carry the icon, so macOS would show
   // the generic Electron atom in the Dock. Set it explicitly.
-  if (process.platform === 'darwin' && app.dock) {
+  // Only when running from source or from npm. A packaged app already carries
+  // its icon in the bundle, and build/ is not shipped inside it -- trying
+  // anyway logged a missing-file error on every launch of the built app.
+  if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
     try {
-      app.dock.setIcon(ICON);
+      const image = nativeImage.createFromBuffer(fs.readFileSync(ICON));
+      if (!image.isEmpty()) app.dock.setIcon(image);
     } catch (err) {
       console.error('could not set dock icon', err);
     }

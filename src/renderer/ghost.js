@@ -22,7 +22,10 @@ let refreshGhostSettings;
 // for a completion is around 500ms, so spending all of it waiting before even
 // asking, as an earlier 500ms debounce did, leaves nothing for the model.
 const IDLE_MS = 300;
-const MIN_CONTEXT = 12; // don't pester at the very start of an empty note
+// Enough context to say something useful, but low enough that a new note is
+// not silently dead: at 12 characters, typing "hello" in a fresh note produced
+// nothing at all and looked broken.
+const MIN_CONTEXT = 4;
 const PREFIX_CHARS = 2000;
 const SUFFIX_CHARS = 600;
 
@@ -108,11 +111,11 @@ function shouldAsk(state) {
   if (!sel.empty) return false; // not while selecting
   if (sel.from < MIN_CONTEXT) return false;
 
-  // Only at the end of a line or before whitespace -- never in the middle of
-  // a word, where a suggestion would be nonsense and the ghost text would sit
-  // on top of what is already written.
+  // Never inside a word, where the suggestion would sit on top of what is
+  // already written. The end of a line, or before a space or punctuation, is
+  // fair game -- including mid-line, which is where revising a note happens.
   const after = state.doc.sliceString(sel.from, sel.from + 1);
-  return !after || /\s/.test(after);
+  return !after || /[\s.,;:!?)\]}$]/.test(after);
 }
 
 /**

@@ -79,3 +79,12 @@ jobs:
       - name: Full-note capture
         if: runner.os != 'Linux'
         run: node scripts/snapshot-check.js
+
+      # Autocomplete UI, driven with a stubbed model so Ollama is not needed.
+      - name: Autocomplete suggestions (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/ghost-check.js
+
+      - name: Autocomplete suggestions
+        if: runner.os != 'Linux'
+        run: node scripts/ghost-check.js
