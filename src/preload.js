@@ -1,10 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const snapshot = process.argv.includes('--snapshot');
 const arg = process.argv.find((a) => a.startsWith('--note-id='));
 const noteId = arg ? arg.slice('--note-id='.length) : null;
 
 contextBridge.exposeInMainWorld('sticky', {
   noteId,
+  // True in the offscreen window used to photograph a note. That window is
+  // not display-limited, so a note longer than the screen can be captured
+  // whole -- which the visible window can never do.
+  isSnapshot: snapshot,
+  snapshotReady: (height) => ipcRenderer.send('note:snapshotReady', height),
   get: () => ipcRenderer.invoke('note:get', noteId),
   update: (patch) => ipcRenderer.invoke('note:update', { id: noteId, ...patch }),
   create: () => ipcRenderer.invoke('note:new'),

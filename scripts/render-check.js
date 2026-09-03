@@ -52,7 +52,12 @@ app.whenReady().then(async () => {
     langLabel: document.querySelectorAll('.cm-code-lang').length,
     tableEl: document.querySelectorAll('table.cm-table').length,
     tableCells: document.querySelectorAll('.cm-table td').length,
-    tableHeaders: document.querySelectorAll('.cm-table th').length
+    tableHeaders: document.querySelectorAll('.cm-table th').length,
+    hostScroll: document.getElementById('host').scrollHeight,
+    contentScroll: document.querySelector('.cm-content').scrollHeight,
+    scrollerScroll: document.querySelector('.cm-scroller').scrollHeight,
+    surfaceScroll: document.getElementById('surface').scrollHeight,
+    winInner: window.innerHeight
   })\`));
   app.exit(0);
 });
@@ -72,6 +77,7 @@ child.on('exit', () => {
     process.exit(1);
   }
   const r = JSON.parse(line.slice(6));
+  console.log('HEIGHTS host=' + r.hostScroll + ' content=' + r.contentScroll + ' scroller=' + r.scrollerScroll + ' surface=' + r.surfaceScroll + ' window=' + r.winInner);
   const checks = [
     ['editor mounted', r.editor],
     ['maths rendered by KaTeX', r.math >= 2],

@@ -123,7 +123,10 @@ body.editing #tools > * { visibility: visible; }
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: var(--fs, 15px);
   line-height: 1.55;
-  overflow-x: hidden;
+  /* #surface is the only scroller. Nested scrollers left CodeMirror computing
+     its viewport against its own clipped box, so growing the window to
+     screenshot a long note revealed nothing new. */
+  overflow: visible;
 }
 .cm-editor .cm-content {
   padding: 10px 12px 22px;

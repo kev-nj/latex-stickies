@@ -518,6 +518,20 @@ function createLiveEditor({ parent, doc, onChange }) {
   });
 }
 
+/**
+ * Turns snapshot rendering on or off and rebuilds the decorations.
+ *
+ * The offscreen window used to photograph a note leaves this on permanently:
+ * it has no caret and nothing should ever unfold there.
+ */
+function setSnapshotMode(view, on) {
+  snapshotMode = on;
+  snapshotDirty = true;
+  // A no-op transaction the field will still recompute from.
+  view.dispatch({ selection: view.state.selection });
+  snapshotDirty = false;
+}
+
 /** Renders everything as a reader would see it, for the duration of `fn`. */
 async function withSnapshot(view, fn) {
   const rebuild = () => {

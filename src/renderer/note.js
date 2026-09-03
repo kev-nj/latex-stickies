@@ -71,17 +71,9 @@ setFocused(document.hasFocus());
  * is measured so a scrolled note is not captured half-missing.
  */
 async function copyNoteAsImage() {
-  document.body.classList.add('capturing-note');
-  try {
-    await withSnapshot(view, async () => {
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const bar = document.getElementById('bar');
-      const contentHeight = bar.offsetHeight + host.scrollHeight;
-      await window.sticky.copyNote({ contentHeight });
-    });
-  } finally {
-    document.body.classList.remove('capturing-note');
-  }
+  // The picture is taken in a separate offscreen window, so this one is left
+  // exactly as it was -- no resize, no flicker, no toolbar to hide.
+  await window.sticky.copyNote({ width: window.innerWidth });
 }
 
 window.sticky.on('copy-note-image', copyNoteAsImage);
@@ -166,6 +158,20 @@ window.sticky.get().then((loaded) => {
       scheduleSave();
     },
   });
+
+  // In the offscreen window used to photograph the note, render everything as
+  // a reader sees it, measure how tall that is, and let the main process take
+  // it from there. No caret, no focus, nothing unfolded.
+  if (window.sticky.isSnapshot) {
+    document.body.classList.add('capturing-note');
+    // Left on for good: this window exists only to be photographed.
+    setSnapshotMode(view, true);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const bar = document.getElementById('bar');
+      window.sticky.snapshotReady(bar.offsetHeight + host.scrollHeight + 8);
+    }));
+    return;
+  }
 
   // Caret at the end, not the start. At position 0 the caret sits inside the
   // heading, which unfolds it -- so every note would open showing "# " before
