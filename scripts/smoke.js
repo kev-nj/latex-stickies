@@ -28,10 +28,27 @@ const usePackage = process.argv.includes('--package');
 const lifecycle = process.argv.includes('--lifecycle');
 const isMac = process.platform === 'darwin';
 
-// Isolated home directories: the lifecycle run opens and closes real note
-// windows, and must never migrate, rewrite or delete anyone's actual notes.
+/**
+ * A throwaway home directory, so opening and closing real note windows in the
+ * lifecycle run can never migrate, rewrite or delete anyone's actual notes.
+ *
+ * Every variable Electron derives a path from has to point inside it, and the
+ * directories have to exist. Redirecting only HOME and USERPROFILE left
+ * getPath('appData') resolving against a folder Windows had not created, and
+ * the app died at startup with "Failed to get 'appData' path".
+ */
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-home-'));
-fs.mkdirSync(path.join(sandbox, 'Documents'), { recursive: true });
+const sandboxEnv = {
+  HOME: sandbox,
+  USERPROFILE: sandbox,
+  APPDATA: path.join(sandbox, 'AppData', 'Roaming'),
+  LOCALAPPDATA: path.join(sandbox, 'AppData', 'Local'),
+  XDG_CONFIG_HOME: path.join(sandbox, '.config'),
+  XDG_CACHE_HOME: path.join(sandbox, '.cache'),
+};
+for (const dir of [path.join(sandbox, 'Documents'), ...Object.values(sandboxEnv)]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 process.on('exit', () => {
   try { fs.rmSync(sandbox, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 });
@@ -71,7 +88,7 @@ const FATAL = [
 function launch(env = {}) {
   const child = spawn(electronPath, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, HOME: sandbox, USERPROFILE: sandbox, ...env },
+    env: { ...process.env, ...sandboxEnv, ...env },
   });
   child.unref?.();
   const state = { out: '', exited: null, child };
