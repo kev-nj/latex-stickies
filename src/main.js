@@ -51,6 +51,40 @@ function titleOf(note) {
   return clean.length > 40 ? `${clean.slice(0, 40)}...` : clean;
 }
 
+/**
+ * Deletes the focused note, asking first.
+ *
+ * The confirmation is a native dialog rather than window.confirm(). These
+ * windows are frameless, transparent and often on top, and a web confirm can
+ * end up behind the note or invisible -- the delete then blocks on a prompt
+ * nobody can see, which looks exactly like the shortcut doing nothing.
+ */
+async function deleteFocusedNote() {
+  const win = BrowserWindow.getFocusedWindow();
+  if (!win) return;
+  const entry = [...windows.entries()].find(([, w]) => w === win);
+  if (!entry) return;
+  const [id] = entry;
+
+  const note = store.get(id);
+  if (note && note.body.trim()) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Delete', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'Delete this note?',
+      detail: `"${titleOf(note)}" will be removed from your notes folder. `
+        + 'This cannot be undone.',
+    });
+    if (response !== 0) return;
+  }
+
+  store.remove(id);
+  if (!win.isDestroyed()) win.destroy();
+  buildMenu();
+}
+
 function cascadeBounds() {
   const area = screen.getPrimaryDisplay().workArea;
   const n = windows.size;
@@ -194,8 +228,15 @@ async function buildMenu() {
   const noteItems = store.all().map((note) => ({
     label: titleOf(note),
     type: 'checkbox',
+    // The tick means "on screen". Since it looks like a checkbox it has to
+    // behave like one: clicking a ticked note closes it, rather than the tick
+    // being decoration you cannot affect.
     checked: windows.has(note.id),
-    click: () => openNote(store.get(note.id) || note),
+    click: () => {
+      const open = windows.get(note.id);
+      if (open && !open.isDestroyed()) open.close();
+      else openNote(store.get(note.id) || note);
+    },
   }));
 
   const template = [
@@ -227,10 +268,7 @@ async function buildMenu() {
           // the key, and had it not, reaching for a normal editing shortcut
           // would have destroyed a note with no undo.
           accelerator: 'CmdOrCtrl+Shift+Backspace',
-          click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            if (win) win.webContents.send('request-delete');
-          },
+          click: () => deleteFocusedNote(),
         },
       ],
     },
@@ -329,7 +367,10 @@ async function buildMenu() {
       ],
     },
     {
-      label: 'Notes',
+      // "All Notes", not "Notes": it sits beside the "Note" menu, and two
+      // near-identical names for the current note and the list of every note
+      // is a coin toss every time you reach for one.
+      label: 'All Notes',
       submenu: noteItems.length
         ? noteItems
         : [{ label: 'No notes yet', enabled: false }],

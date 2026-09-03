@@ -92,8 +92,9 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 | `Cmd+T` | Keep on top |
 | `Cmd+±` | Text size |
 
-The **Notes** menu lists every note you have, ticking the ones on screen, so a
-note you closed is one click away rather than lost until the next launch.
+The **All Notes** menu lists every note you have. A tick means it is on screen;
+click to open a note, or click a ticked one to close it. So a note you closed
+is one click away rather than lost until the next launch.
 
 ## Where notes live
 

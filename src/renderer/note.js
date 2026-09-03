@@ -180,11 +180,6 @@ pin.addEventListener('click', () => {
 
 window.sticky.on('font-size', (delta) => setFontSize(note.fontSize + delta));
 window.sticky.on('always-on-top-changed', (v) => setPinned(v));
-window.sticky.on('request-delete', () => {
-  if (!note.body.trim() || confirm('Delete this note? This cannot be undone.')) {
-    window.sticky.remove();
-  }
-});
 
 /* ---------- start ---------- */
 
