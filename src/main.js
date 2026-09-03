@@ -247,12 +247,27 @@ if (!app.requestSingleInstanceLock()) {
   app.exit(0);
 }
 
-app.on('second-instance', () => {
+/**
+ * Brings the notes back to the front -- from a Dock click on macOS, or from a
+ * second launch anywhere.
+ *
+ * Reopening from disk when nothing is on screen is the important half. Without
+ * it, launching again while a note-less instance was alive iterated an empty
+ * set of windows and did nothing at all, so the app looked hung: the launcher
+ * reported it was running, and no window ever appeared.
+ */
+function surfaceNotes() {
+  if (windows.size === 0) {
+    restoreNotes();
+    return;
+  }
   windows.forEach((win) => {
     if (win.isMinimized()) win.restore();
     win.show();
   });
-});
+}
+
+app.on('second-instance', surfaceNotes);
 
 app.whenReady().then(() => {
   // Run from npm there is no .app bundle to carry the icon, so macOS would show
@@ -268,14 +283,17 @@ app.whenReady().then(() => {
   buildMenu();
   restoreNotes();
 
-  app.on('activate', () => {
-    if (windows.size === 0) restoreNotes();
-    else windows.forEach((w) => w.show());
-  });
+  app.on('activate', surfaceNotes);
 });
 
-// Stickies live on even with no window open, matching the macOS app.
-app.on('window-all-closed', () => {});
+// macOS apps outlive their windows -- that is how Stickies behaves, and the
+// Dock icon is the way back. Windows and Linux have no such affordance: the
+// process lingered invisibly with no way to reach it, and the next launch
+// handed off to it and appeared to do nothing. Quit there instead. The notes
+// are already on disk and come back on the next launch.
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
 app.on('before-quit', () => store.saveNow());
 
 ipcMain.handle('note:get', (_e, id) => store.get(id));
