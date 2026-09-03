@@ -156,22 +156,7 @@ function restoreNotes() {
   notes.forEach(openNote);
 }
 
-const WELCOME = [
-  '# Welcome to LaTeX Stickies',
-  '',
-  'Type math inline like $e^{i\\pi} + 1 = 0$, or on its own line:',
-  '',
-  '$$\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}$$',
-  '',
-  'Markdown works too:',
-  '',
-  '- **bold**, *italic*, `code`, ~~strikethrough~~',
-  '- [ ] task lists',
-  '- > blockquotes, tables, and fenced code blocks',
-  '',
-  'Click the note to edit, click outside to render.',
-  'Cmd+N new note · Cmd+E toggle edit · Cmd+T always on top',
-].join('\n');
+const { WELCOME } = require('./welcome');
 
 function buildMenu() {
   const template = [
