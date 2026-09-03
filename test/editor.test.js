@@ -26,9 +26,9 @@ function render(value, selStart, selEnd) {
   return value.slice(0, selStart) + '|' + value.slice(selStart);
 }
 
-function press(spec, key, shiftKey = false) {
+function press(spec, key, shiftKey = false, metaKey = false) {
   const { value, start, end } = parse(spec);
-  const edit = computeEdit({ key, shiftKey }, value, start, end);
+  const edit = computeEdit({ key, shiftKey, metaKey }, value, start, end);
   if (!edit) return null;
   const next = value.slice(0, edit.from) + edit.insert + value.slice(edit.to);
   const selStart = edit.selStart ?? edit.from + edit.insert.length;
@@ -70,9 +70,26 @@ const cases = [
   ['backspace clears pair', F + 'f(|)',            'Backspace', F + 'f|'],
 ];
 
+// Cmd/Ctrl shortcuts take a fourth argument.
+const modCases = [
+  ['bold wraps selection',   'make |this§ bold', 'b', 'make **|this§** bold'],
+  ['bold unwraps again',     'make |**this**§ b', 'b', 'make |this§ b'],
+  ['bold outside selection', 'make **|this§** b', 'b', 'make |this§ b'],
+  ['bold with no selection', 'x |',              'b', 'x **|**'],
+  ['italic wraps',           '|word§',           'i', '*|word§*'],
+  ['code wraps',             '|x=1§',            'e', '`|x=1§`'],
+  ['link parks caret in url','see |docs§',       'k', 'see [docs](|)'],
+  ['link with no selection', 'see |',            'k', 'see [|]()'],
+  ['unknown mod key ignored','text|',            'q', null],
+];
+
 let bad = 0;
-for (const [name, input, key, expected, shift] of cases) {
-  const got = press(input, key, shift);
+const all = [
+  ...cases.map((c) => [...c, false]),
+  ...modCases.map(([n, i, k, e]) => [n, i, k, e, false, true]),
+];
+for (const [name, input, key, expected, shift, meta] of all) {
+  const got = press(input, key, shift, meta);
   const ok = got === expected;
   if (!ok) bad++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
@@ -82,5 +99,5 @@ for (const [name, input, key, expected, shift] of cases) {
     console.log(`        got: ${JSON.stringify(got)}`);
   }
 }
-console.log(bad ? `\n${bad} failing` : `\nall ${cases.length} passing`);
+console.log(bad ? `\n${bad} failing` : `\nall ${all.length} passing`);
 process.exit(bad ? 1 : 0);

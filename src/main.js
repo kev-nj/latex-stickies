@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, Menu, screen, shell } = require('electron');
+const {
+  app, BrowserWindow, ipcMain, Menu, clipboard, ClipboardItem, screen, shell,
+} = require('electron');
 const path = require('path');
 
 // Pin the identity before anything derives a path from it.
@@ -214,6 +216,13 @@ function buildMenu() {
           click: () => BrowserWindow.getFocusedWindow()?.webContents.send('toggle-edit'),
         },
         {
+          label: 'Copy Note as Image',
+          accelerator: 'CmdOrCtrl+Shift+C',
+          click: () => BrowserWindow.getFocusedWindow()
+            ?.webContents.send('copy-note-image'),
+        },
+        { type: 'separator' },
+        {
           label: 'Always on Top',
           accelerator: 'CmdOrCtrl+T',
           click: () => {
@@ -347,4 +356,110 @@ ipcMain.handle('note:setAlwaysOnTop', (e, value) => {
 
 ipcMain.handle('note:close', (e) => BrowserWindow.fromWebContents(e.sender)?.close());
 
+/**
+ * Right-click menu for a rendered equation.
+ *
+ * "Copy as Image" screenshots just the equation's rectangle out of the live
+ * window. KaTeX draws with HTML and fonts rather than emitting a picture, so
+ * capturing what is already on screen is both the simplest route to a
+ * pasteable image and the one guaranteed to match what the note shows.
+ *
+ * Resolves once the menu closes, so the renderer knows when to drop the
+ * temporary capture styling.
+ */
+ipcMain.handle('note:mathMenu', (e, { rect, tex } = {}) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return null;
+
+  return new Promise((resolve) => {
+    const menu = Menu.buildFromTemplate([
+      {
+        label: 'Copy as Image',
+        enabled: !!rect,
+        click: async () => {
+          try {
+            // capturePage stalls on macOS when the window is not frontmost.
+            // Right-clicking a note focuses it, but make that explicit.
+            if (!win.isFocused()) win.focus();
+            // capturePage wants whole pixels inside the page. It captures at
+            // the display's scale factor, so this comes back at 2x on Retina.
+            const image = await win.webContents.capturePage({
+              x: Math.max(0, Math.floor(rect.x)),
+              y: Math.max(0, Math.floor(rect.y)),
+              width: Math.max(1, Math.ceil(rect.width)),
+              height: Math.max(1, Math.ceil(rect.height)),
+            });
+            await copyImage(image);
+          } catch (err) {
+            console.error('could not copy the equation as an image', err);
+          }
+        },
+      },
+      {
+        label: 'Copy LaTeX',
+        enabled: !!tex,
+        click: () => {
+          Promise.resolve(clipboard.writeText(tex)).catch((err) =>
+            console.error('could not copy the LaTeX source', err));
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Copy Note as Image',
+        // The renderer has to hide the toolbar and measure the content first.
+        click: () => win.webContents.send('copy-note-image'),
+      },
+    ]);
+    menu.popup({ window: win, callback: () => resolve(null) });
+  });
+});
+
 ipcMain.handle('note:openExternal', (_e, url) => openExternal(url));
+
+ipcMain.handle('note:copyText', (_e, text) => clipboard.writeText(String(text)));
+
+/**
+ * Puts a PNG on the clipboard.
+ *
+ * Electron 44 replaced the clipboard with the async, web-shaped API: there is
+ * no writeImage, and write() takes ClipboardItems. The older call fails
+ * silently rather than throwing, so everything image-related goes through here.
+ */
+async function copyImage(image) {
+  if (!image || image.isEmpty()) throw new Error('captured an empty image');
+  await clipboard.write([new ClipboardItem({ 'image/png': image.toPNG() })]);
+}
+
+/**
+ * Screenshots a whole note.
+ *
+ * A note can hold more than its window shows, and a picture that stops at the
+ * scroll line is not the note. So the window is grown to fit its content for
+ * the capture and put straight back -- capped to the display, since a very long
+ * note would otherwise ask for a window taller than the screen.
+ */
+ipcMain.handle('note:copyNote', async (e, { contentHeight } = {}) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return null;
+
+  const original = win.getBounds();
+  const { workArea } = screen.getDisplayMatching(original);
+  const wanted = Math.ceil(contentHeight || original.height);
+  const target = Math.min(Math.max(wanted, 80), workArea.height);
+  const grew = target > original.height;
+
+  try {
+    if (grew) {
+      win.setBounds({ ...original, height: target });
+      // Give the compositor a frame at the new size before capturing.
+      await new Promise((resolve) => setTimeout(resolve, 140));
+    }
+    if (!win.isFocused()) win.focus();
+    await copyImage(await win.webContents.capturePage());
+  } catch (err) {
+    console.error('could not copy the note as an image', err);
+  } finally {
+    if (grew) win.setBounds(original);
+  }
+  return null;
+});

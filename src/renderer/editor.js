@@ -164,9 +164,78 @@ function onBackspace(value, start, end) {
   return null;
 }
 
+/* ---------- formatting shortcuts ---------- */
+
+const WRAPPERS = {
+  b: '**',
+  i: '*',
+  e: '`',
+};
+
+/**
+ * Cmd/Ctrl+B, +I, +E wrap the selection, and unwrap it again when it is
+ * already wrapped -- pressing bold twice should leave the text as it started,
+ * not bury it in four asterisks.
+ */
+function onWrap(value, start, end, key) {
+  const mark = WRAPPERS[key];
+  if (!mark) return null;
+  const n = mark.length;
+
+  const selected = value.slice(start, end);
+
+  // Already wrapped, either inside the selection or just outside it.
+  if (selected.startsWith(mark) && selected.endsWith(mark) && selected.length > n * 2) {
+    const inner = selected.slice(n, -n);
+    return {
+      from: start, to: end, insert: inner,
+      selStart: start, selEnd: start + inner.length,
+    };
+  }
+  if (value.slice(start - n, start) === mark && value.slice(end, end + n) === mark) {
+    return {
+      from: start - n, to: end + n, insert: selected,
+      selStart: start - n, selEnd: start - n + selected.length,
+    };
+  }
+
+  if (start === end) {
+    // No selection: leave the caret between a fresh pair, ready to type.
+    return { from: start, to: end, insert: mark + mark, selStart: start + n };
+  }
+
+  return {
+    from: start, to: end,
+    insert: mark + selected + mark,
+    selStart: start + n, selEnd: end + n,
+  };
+}
+
+/**
+ * Cmd/Ctrl+K makes a link, and leaves the caret wherever there is still
+ * something to type: in the URL when the label came from the selection, in the
+ * brackets when the link is empty and needs a label first.
+ */
+function onLink(value, start, end) {
+  const selected = value.slice(start, end);
+  const insert = `[${selected}]()`;
+  const caret = selected
+    ? start + selected.length + 3 // inside ( )
+    : start + 1;                  // inside [ ]
+  return { from: start, to: end, insert, selStart: caret };
+}
+
 /* ---------- dispatch ---------- */
 
 function computeEdit(e, value, start, end) {
+  // Cmd on macOS, Ctrl elsewhere -- but never Alt, which carries its own
+  // characters, and never both modifiers at once.
+  const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
+  if (mod) {
+    const key = (e.key || '').toLowerCase();
+    if (key === 'k') return onLink(value, start, end);
+    return onWrap(value, start, end, key);
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
 
   if (e.key === 'Enter') return onEnter(value, start, end);

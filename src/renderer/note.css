@@ -276,6 +276,33 @@ body.editing #preview { visibility: hidden; }
 #preview del { opacity: 0.6; }
 #preview img { max-width: 100%; border-radius: 4px; }
 #preview .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
+/* Held for the instant the whole note is screenshotted: the hover toolbar and
+   the scrollbar are chrome, not content, and neither belongs in the picture. */
+body.capturing-note #tools > * { visibility: hidden; }
+body.capturing-note ::-webkit-scrollbar { width: 0; height: 0; }
+body.capturing-note #surface { overflow: hidden; }
+
+/* Belt and braces: whatever else is happening, an equation never wears the
+   single-equation card while the whole note is being captured. */
+body.capturing-note #preview [data-math].capturing {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+/* Applied for the instant an equation is screenshotted. The paper colour would
+   otherwise be baked into an image destined for Slack or an email, where the
+   background is anything but pastel yellow. */
+#preview [data-math].capturing {
+  display: inline-block;
+  background: #ffffff;
+  color: #16181d;
+  padding: 10px 14px;
+  border-radius: 5px;
+}
+#preview [data-math][data-display="block"].capturing { display: block; }
+#preview [data-math].capturing .katex { color: #16181d; }
+
 #preview .math-error {
   color: #a01f1f;
   font-family: ui-monospace, Menlo, monospace;

@@ -63,6 +63,9 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 | `Cmd+E` | Toggle edit / preview |
 | `Cmd+T` | Keep on top |
 | `Cmd+±` | Text size |
+| `Cmd+B` / `Cmd+I` / `Cmd+E` | Bold / italic / code |
+| `Cmd+K` | Link |
+| `Cmd+Shift+C` | Copy note as image |
 | `Esc` | Leave edit mode |
 
 ## Where notes live

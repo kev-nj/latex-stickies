@@ -140,8 +140,15 @@ function renderInto(target, src) {
     const chunk = mathChunks[Number(slot.dataset.math)];
     // KaTeX output is generated locally with trust disabled, and lands inside
     // this one element -- it cannot alter the structure around it.
-    if (chunk) slot.innerHTML = renderMath(chunk);
-    else slot.remove();
+    if (!chunk) {
+      slot.remove();
+      return;
+    }
+    slot.innerHTML = renderMath(chunk);
+    // Kept for "Copy LaTeX": the source is not recoverable from KaTeX's output.
+    // Set through the DOM, so no escaping question arises.
+    slot.dataset.tex = chunk.tex;
+    slot.dataset.display = chunk.display ? 'block' : 'inline';
   });
 }
 

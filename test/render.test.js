@@ -103,6 +103,21 @@ const checks = [
       .filter((n) => !n.closest('[data-math]'));
     return stray.length === 0;
   })()],
+  // The context menu offers "Copy LaTeX", and KaTeX's output cannot be turned
+  // back into source, so the original has to be carried on the element.
+  ['tex source kept on the rendered element', (() => {
+    const el = dom.window.document.createElement('div');
+    el.innerHTML = renderMarkdown('$e^{i\\pi}+1=0$');
+    const slot = el.querySelector('[data-math]');
+    return slot && slot.getAttribute('data-tex') === 'e^{i\\pi}+1=0';
+  })()],
+  ['display maths marked as block', (() => {
+    const el = dom.window.document.createElement('div');
+    el.innerHTML = renderMarkdown('$$x^2$$');
+    const slot = el.querySelector('[data-math]');
+    return slot && slot.getAttribute('data-display') === 'block';
+  })()],
+
   ['marker text in an attribute stays inert', (() => {
     const el = dom.window.document.createElement('div');
     el.innerHTML = renderMarkdown('<img src=x title="@@MATH0@@">\n\n$x^2$');

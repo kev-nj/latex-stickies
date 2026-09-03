@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, clipboard } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 const arg = process.argv.find((a) => a.startsWith('--note-id='));
 const noteId = arg ? arg.slice('--note-id='.length) : null;
@@ -12,15 +12,22 @@ contextBridge.exposeInMainWorld('sticky', {
   setAlwaysOnTop: (v) => ipcRenderer.invoke('note:setAlwaysOnTop', v),
   close: () => ipcRenderer.invoke('note:close'),
   openExternal: (url) => ipcRenderer.invoke('note:openExternal', url),
-  // Electron's clipboard rather than navigator.clipboard, which is
-  // unreliable for a page served over file://.
-  copy: (text) => clipboard.writeText(String(text)),
+  // Routed through the main process rather than written here. The clipboard
+  // API differs between processes and changed shape in Electron 44; this way
+  // every copy in the app goes through one implementation that is known to
+  // work, instead of a second one nobody tested.
+  copy: (text) => ipcRenderer.invoke('note:copyText', String(text)),
   // Synchronous on purpose. This is called while the window is being torn
   // down, where an async invoke() would race the renderer's destruction and
   // lose the edit. sendSync blocks until main has the text.
   flush: (body) => ipcRenderer.sendSync('note:flush', { id: noteId, body }),
+  mathMenu: (payload) => ipcRenderer.invoke('note:mathMenu', payload),
+  copyNote: (payload) => ipcRenderer.invoke('note:copyNote', payload),
   on: (channel, fn) => {
-    const allowed = ['toggle-edit', 'request-delete', 'font-size', 'always-on-top-changed'];
+    const allowed = [
+      'toggle-edit', 'request-delete', 'font-size', 'always-on-top-changed',
+      'copy-note-image',
+    ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, payload) => fn(payload));
   },

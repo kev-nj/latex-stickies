@@ -154,9 +154,73 @@ editor.addEventListener('blur', () => setEditing(false));
 
 // Clicking the paper enters editing, but links and checkboxes act first.
 preview.addEventListener('mousedown', (e) => {
+  // Primary button only. A right-click (or two-finger tap) also fires
+  // mousedown, and switching to the editor here would tear the preview down
+  // before the contextmenu event could reach the equation under the cursor.
+  if (e.button !== 0) return;
   if (e.target.closest('a')) return;
   e.preventDefault();
   setEditing(true);
+});
+
+/**
+ * Screenshots the whole note to the clipboard.
+ *
+ * Three things have to be true before the shot is taken: the note is showing
+ * its rendered form rather than raw markdown, the hover toolbar is out of
+ * frame, and the main process knows how tall the content actually is so a
+ * scrolled note is not captured half-missing.
+ */
+async function copyNoteAsImage() {
+  if (document.body.classList.contains('editing')) setEditing(false);
+
+  // An equation right-clicked a moment ago is still wearing the white card
+  // meant for capturing it alone. Reaching "Copy Note as Image" from that same
+  // menu would otherwise bake the card into the picture of the note.
+  preview.querySelectorAll('.capturing')
+    .forEach((el) => el.classList.remove('capturing'));
+
+  document.body.classList.add('capturing-note');
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  const bar = document.getElementById('bar');
+  const contentHeight = bar.offsetHeight + preview.scrollHeight;
+  try {
+    await window.sticky.copyNote({ contentHeight });
+  } finally {
+    document.body.classList.remove('capturing-note');
+  }
+}
+
+window.sticky.on('copy-note-image', copyNoteAsImage);
+
+// Right-click an equation to copy it as an image or as its LaTeX source.
+preview.addEventListener('contextmenu', async (e) => {
+  const slot = e.target.closest('[data-math]');
+  if (!slot) {
+    // Away from an equation the menu still offers the whole note.
+    e.preventDefault();
+    window.sticky.mathMenu({});
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+
+  // The note's paper colour would end up baked into the screenshot, so give the
+  // equation a plain light card for the moment of capture. Two frames, because
+  // the rectangle has to be measured after the padding is applied.
+  slot.classList.add('capturing');
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  const box = slot.getBoundingClientRect();
+  try {
+    await window.sticky.mathMenu({
+      tex: slot.dataset.tex,
+      rect: { x: box.left, y: box.top, width: box.width, height: box.height },
+    });
+  } finally {
+    slot.classList.remove('capturing');
+  }
 });
 
 // Links open in the real browser rather than navigating the sticky itself.
