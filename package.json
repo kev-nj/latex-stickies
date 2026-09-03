@@ -46,13 +46,10 @@
     "@codemirror/state": "^6.7.2",
     "@codemirror/view": "^6.43.10",
     "@lezer/highlight": "^1.2.3",
-    "dompurify": "^3.1.6",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",
-    "katex": "^0.16.11",
-    "marked": "^18.0.11",
-    "prismjs": "^1.30.0"
+    "katex": "^0.16.11"
   },
   "dependencies": {
     "electron": "^44.1.1"
