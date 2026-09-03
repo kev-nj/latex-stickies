@@ -185,8 +185,6 @@ window.sticky.on('request-delete', () => {
     window.sticky.remove();
   }
 });
-// Kept for the menu item, though there are no longer two modes to toggle.
-window.sticky.on('toggle-edit', () => view && view.focus());
 
 /* ---------- start ---------- */
 

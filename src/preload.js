@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('sticky', {
   },
   on: (channel, fn) => {
     const allowed = [
-      'toggle-edit', 'request-delete', 'font-size', 'always-on-top-changed',
+      'request-delete', 'font-size', 'always-on-top-changed',
       'copy-note-image', 'ai-settings-changed', 'note-changed', 'find-in-note', 'describe-latex',
     ];
     if (!allowed.includes(channel)) return;

@@ -1,9 +1,9 @@
 # LaTeX Stickies
 
-Sticky notes for your desktop that render LaTeX and Markdown.
+Sticky notes for your desktop that render LaTeX and Markdown as you type.
 
-Write `$e^{i\pi} + 1 = 0$` in a note and it renders as soon as you click away.
-Notes stay where you put them, in the color you chose, across restarts.
+Write `$e^{i\pi} + 1 = 0$` and it becomes the equation. Click into it and the
+source comes back. There is no edit mode and no preview mode.
 
 ```
 npx latex-stickies
@@ -16,41 +16,63 @@ npm install -g latex-stickies
 latex-stickies
 ```
 
-Requires Node 22.12 or newer. The first run downloads the Electron runtime (~230 MB), so
-give it a minute; later launches are instant.
+Requires Node 22.12 or newer. The first run downloads the Electron runtime
+(~230 MB), so give it a minute; later launches are instant. On a Mac you can
+download a `.dmg` from [Releases](https://github.com/kev-nj/latex-stickies/releases)
+instead and skip Node entirely.
 
 ## Writing in a note
 
-Everything renders as you type. Click into a line to see the markdown behind
-it; move away and it renders again.
+Everything renders while you write. Put the caret in an element to see the
+markdown behind it; move away and it renders again.
 
-**Math** — `$…$` inline, `$$…$$` on its own line. Delimiters have to hug their
-content, so ordinary prose like `costs $5 and $6` stays text rather than turning
-into a formula. Broken TeX shows the source underlined in red with the parse
-error on hover, instead of blanking the note.
+**Maths** — `$…$` inline, `$$…$$` on its own line. Delimiters have to hug their
+content, so prose like `costs $5 and $6` stays text rather than turning into a
+formula. Broken TeX shows the source underlined in red with the parse error on
+hover, instead of blanking the note.
 
-**Markdown** — headings, `**bold**`, `*italic*`, `~~strikethrough~~`, lists,
-task lists, tables, blockquotes, and links (which open in your browser).
+**Markdown** — headings, `**bold**`, `*italic*`, `` `code` ``, `~~struck~~`,
+quotes, lists, and links that open in your browser. Tables render as tables,
+and their cells render maths. Task list checkboxes are clickable: tick one and
+`[ ]` becomes `[x]` in the file.
 
-**Code** — fenced blocks are highlighted in 20 languages, with the language
-labelled and a copy button on hover:
-
-````
-```python
-def gaussian(x, mu, sigma):
-    return exp(-((x - mu) ** 2) / (2 * sigma ** 2))
-```
-````
-
-Aliases work as you would expect: `sh`, `shell` and `zsh` all mean bash, `py`
-means python, and `tex` means latex. A fence with no language stays plain --
-guessing on a two-line snippet is wrong often enough to be worse than nothing.
+**Code** — fenced blocks are highlighted across eleven languages, labelled with
+the language, and each has a copy button.
 
 Inside a fence the editor behaves like a code editor: Enter keeps your
 indentation and adds a level after `:` or `{`, Tab and Shift+Tab indent and
-dedent (including a whole selection), and brackets and quotes auto-close.
-Outside a fence it behaves like a notes field instead -- lists continue on
-Enter, and quotes are left alone so `don't` types normally.
+dedent, and brackets and quotes auto-close. Outside one it behaves like a notes
+field — lists continue on Enter, and quotes are left alone so `don't` types
+normally.
+
+**Images of your maths** — right-click a rendered equation for *Copy as Image*
+or *Copy LaTeX*. `Cmd+Shift+C` copies the whole note as an image, however long
+it is. Both go straight to the clipboard, ready to paste into Slack or an email.
+
+## Autocomplete (optional, local)
+
+A grey suggestion appears after a pause in typing; **Tab** accepts it, **Esc**
+dismisses it. It runs entirely on your machine through
+[Ollama](https://ollama.com) — nothing is sent anywhere — and is **off by
+default**. Turn it on under **Note → Autocomplete**.
+
+Pull a small model. This fires on every pause, so speed matters far more than
+size:
+
+```
+ollama pull qwen2.5-coder:1.5b
+```
+
+Measured on a MacBook: **0.06–0.5s** with that model, against 0.4–3.5s for a
+14B — and the small one wrote better prose. Choose yours under **Note →
+Autocomplete Model**; installed models are listed with their sizes.
+
+It knows what this app is for. `$$\int_0^1 x^2 dx = ` suggests `\frac{1}{3}$$`,
+and `The derivative of $x^2$ is ` suggests `$2x$.`
+
+**`Cmd+Shift+M`** turns a description into LaTeX: select *"integral of e to the
+minus x squared from 0 to infinity"* and it becomes
+`$\int_{0}^{\infty} e^{-x^2}\,dx$`.
 
 ## Keyboard
 
@@ -59,18 +81,19 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 | | |
 |---|---|
 | `Cmd+N` | New note |
-| `Cmd+W` | Close note |
-| `Cmd+Shift+Backspace` | Delete note |
-| `Cmd+F` | Find in note |
-| `Cmd+Shift+M` | Maths from a description |
-| `Cmd+Shift+O` | Open the notes folder |
-| `Cmd+E` | Toggle edit / preview |
-| `Cmd+T` | Keep on top |
-| `Cmd+±` | Text size |
+| `Cmd+W` | Close note (it reopens next launch) |
+| `Cmd+Shift+Backspace` | Delete note, permanently |
 | `Cmd+B` / `Cmd+I` / `Cmd+E` | Bold / italic / code |
 | `Cmd+K` | Link |
-| `Cmd+Shift+C` | Copy note as image |
-| `Esc` | Leave edit mode |
+| `Cmd+F` | Find in note |
+| `Cmd+Shift+M` | Maths from a description |
+| `Cmd+Shift+C` | Copy note as an image |
+| `Cmd+Shift+O` | Open the notes folder |
+| `Cmd+T` | Keep on top |
+| `Cmd+±` | Text size |
+
+The **Notes** menu lists every note you have, ticking the ones on screen, so a
+note you closed is one click away rather than lost until the next launch.
 
 ## Where notes live
 
@@ -83,47 +106,52 @@ One Markdown file per note, in a folder you can open:
   .stickies.json      # colours, positions, pinned state
 ```
 
-They are ordinary files, so you can grep them, keep the folder in git, sync it
-through Dropbox, or edit a note in another editor -- the open note follows the
-change. Files are named from the note's first line, and renamed if you retitle
-it; a file you rename yourself is left alone. `Cmd+Shift+O` opens the folder.
+They are ordinary files: grep them, keep the folder in git, sync it through
+Dropbox, or edit a note in another editor — the open note follows the change.
+`Cmd+Shift+O` opens the folder.
 
-An existing `notes.json` is migrated the first time and then left in place.
+Files are named from the note's first line, and renamed if you retitle it. A
+file you rename yourself keeps its name. Dropping a `.tex` or `.txt` file into
+the folder makes it a note too, and it keeps that extension.
 
-Saves are atomic -- written to a temp file, flushed, then renamed over the
-target -- so a crash, a force quit, or pulling the power leaves the previous
-good file intact rather than a truncated one. Only one instance runs at a time,
-because two copies would hold divergent notes in memory and the last to quit
-would silently overwrite the other.
+Metadata lives in the sidecar index rather than in frontmatter, so the note
+files stay clean — a `.tex` file with YAML at the top would not compile.
+
+Saves are atomic: written to a temp file, flushed, then renamed over the
+target, so a crash or force quit leaves the previous file intact rather than a
+truncated one. Only one instance runs at a time, because two copies would hold
+divergent notes and the last to quit would overwrite the other.
+
+An existing `notes.json` from an older version is migrated the first time and
+then left in place.
 
 ## Development
 
 ```
 npm install
 npm start        # run from source
-npm test         # 4 suites, 62 assertions
-npm run vendor   # regenerate the bundled Prism
+npm test         # unit suites
+npm run vendor   # rebuild the bundled libraries
 npm run icon     # rebuild the app icon from assets/icon-master.png
+npm run dist     # build a macOS .app and .dmg
 ```
 
-Artwork lives in `assets/`: `logo.jpeg` is the original, and `icon-master.png`
-is the prepared 1024px master the icon is generated from -- transparent ground,
-art filling 824 of the canvas, which is the macOS convention that keeps an icon
-at the same visual weight as the rest of the Dock.
+Beyond the unit tests, several checks drive the real app and run in CI on
+macOS, Windows and Linux:
+
+```
+node scripts/smoke.js             # boots, and stays up
+node scripts/smoke.js --lifecycle # closing every note behaves per platform
+node scripts/render-check.js      # the first-run note renders correctly
+node scripts/ghost-check.js       # autocomplete suggests, and Tab accepts
+node scripts/snapshot-check.js    # a long note is captured whole
+```
 
 The renderer loads over `file://` under a strict content-security policy, so
-KaTeX, marked, DOMPurify and Prism are vendored into `src/renderer/vendor/`
-rather than pulled from a CDN. Note text is sanitized before it reaches the
-page, and the renderer talks to disk only through a six-function preload bridge.
-
-To build a macOS `.app` and `.dmg`:
-
-```
-npm run dist
-```
-
-The build is unsigned, so macOS will warn on other machines unless you sign it
-with an Apple Developer ID.
+CodeMirror and KaTeX are bundled into `src/renderer/vendor/` rather than pulled
+from a CDN. Note text is never parsed as HTML, and the renderer reaches the
+filesystem and the network only through a narrow preload bridge — Ollama is
+called from the main process, so the page keeps `default-src 'none'`.
 
 ## License
 

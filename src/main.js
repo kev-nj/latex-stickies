@@ -239,11 +239,6 @@ async function buildMenu() {
       label: 'Note',
       submenu: [
         {
-          label: 'Toggle Edit / Preview',
-          accelerator: 'CmdOrCtrl+E',
-          click: () => BrowserWindow.getFocusedWindow()?.webContents.send('toggle-edit'),
-        },
-        {
           label: 'Maths from Description...',
           accelerator: 'CmdOrCtrl+Shift+M',
           click: () => BrowserWindow.getFocusedWindow()?.webContents.send('describe-latex'),
