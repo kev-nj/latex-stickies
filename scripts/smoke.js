@@ -16,6 +16,8 @@
  * LATEX_STICKIES_SMOKE_CLOSE_MS, which is inert unless set.
  */
 const { spawn, spawnSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ALIVE_MS = 12000;
@@ -25,6 +27,14 @@ const GRACE_MS = 8000;
 const usePackage = process.argv.includes('--package');
 const lifecycle = process.argv.includes('--lifecycle');
 const isMac = process.platform === 'darwin';
+
+// Isolated home directories: the lifecycle run opens and closes real note
+// windows, and must never migrate, rewrite or delete anyone's actual notes.
+const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-home-'));
+fs.mkdirSync(path.join(sandbox, 'Documents'), { recursive: true });
+process.on('exit', () => {
+  try { fs.rmSync(sandbox, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+});
 
 let appDir;
 let electronPath;
@@ -61,8 +71,9 @@ const FATAL = [
 function launch(env = {}) {
   const child = spawn(electronPath, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ...env },
+    env: { ...process.env, HOME: sandbox, USERPROFILE: sandbox, ...env },
   });
+  child.unref?.();
   const state = { out: '', exited: null, child };
   const record = (d) => { state.out += d; process.stdout.write(d); };
   child.stdout.on('data', record);
@@ -85,6 +96,16 @@ function kill(child) {
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Is that pid still around? Signal 0 tests without sending anything. */
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 /** Resolves true as soon as `test` passes, false if `ms` elapses first. */
 async function until(test, ms) {
@@ -146,10 +167,16 @@ async function lifecycleMode() {
       fail(
         'app kept running with no windows open. On this platform there is no ' +
         'way back to it, and the next launch would hand off to this instance ' +
-        'and appear to do nothing.',
+        'and appear to do nothing. An open handle -- the notes-folder watcher ' +
+        'is the usual culprit -- keeps the event loop alive.',
         app
       );
     }
+    // Electron spawns helpers; none of them should outlive the app either.
+    const stragglers = await until(
+      () => !isProcessAlive(app.child.pid), GRACE_MS);
+    if (!stragglers) fail('the main process is still alive after exiting', app);
+
     checkFatal(app);
     console.log(`\nPASS  app quit after its last note closed (code=${app.exited.code})`);
     return;

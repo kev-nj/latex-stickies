@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('sticky', {
   flush: (body) => ipcRenderer.sendSync('note:flush', { id: noteId, body }),
   mathMenu: (payload) => ipcRenderer.invoke('note:mathMenu', payload),
   copyNote: (payload) => ipcRenderer.invoke('note:copyNote', payload),
+  // These windows are frameless, so on Windows and Linux there is no menu
+  // bar at all. This is the way in.
+  openAppMenu: () => ipcRenderer.send('app:show-menu'),
 
   // Optional, local-only autocomplete. Requests are made in the main process:
   // this page cannot reach the network, and should not be able to.

@@ -157,7 +157,19 @@ function openNote(note) {
   win.on('closed', () => {
     windows.delete(note.id);
     smokeLog(`windows=${windows.size}`);
-    buildMenu(); // the tick beside this note in the Notes menu
+
+    // macOS apps outlive their windows; the Dock icon is the way back.
+    // Elsewhere there is no way back, so an app with no windows is just an
+    // invisible process -- and the next launch hands off to it and appears to
+    // do nothing. Leave, rather than trusting the quit lifecycle to unwind an
+    // event loop that open handles can keep alive.
+    if (windows.size === 0 && process.platform !== 'darwin') {
+      prepareToExit();
+      process.exit(0);
+      return;
+    }
+
+    buildMenu(); // the tick beside this note in the All Notes menu
   });
 
   // Links inside a note open in the real browser, never inside the sticky.
@@ -429,8 +441,26 @@ app.on('second-instance', surfaceNotes);
  * Dropbox, a git checkout. The open window updates in place rather than
  * quietly overwriting what was changed on disk.
  */
+let stopWatchingNotes = null;
+
+/**
+ * Everything that must happen before the process goes away.
+ *
+ * Synchronous on purpose: it runs immediately before process.exit(), which
+ * gives nothing asynchronous a chance to finish. The watcher is closed first
+ * because its handle is what keeps the event loop -- and so the invisible
+ * process -- alive after the last window has gone.
+ */
+function prepareToExit() {
+  if (stopWatchingNotes) {
+    stopWatchingNotes();
+    stopWatchingNotes = null;
+  }
+  store.saveNow();
+}
+
 function watchNotesFolder() {
-  store.watch((changed) => {
+  stopWatchingNotes = store.watch((changed) => {
     for (const note of changed) {
       const win = windows.get(note.id);
       if (win && !win.isDestroyed()) win.webContents.send('note-changed', note.body);
@@ -472,10 +502,15 @@ app.whenReady().then(async () => {
 // process lingered invisibly with no way to reach it, and the next launch
 // handed off to it and appeared to do nothing. Quit there instead. The notes
 // are already on disk and come back on the next launch.
+// Belt and braces: the window 'closed' handler above normally gets there
+// first, but this catches any window torn down by another route.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    prepareToExit();
+    process.exit(0);
+  }
 });
-app.on('before-quit', () => store.saveNow());
+app.on('before-quit', prepareToExit);
 
 ipcMain.handle('note:get', (_e, id) => store.get(id));
 let titleTimer = null;
@@ -585,6 +620,19 @@ ipcMain.handle('note:mathMenu', (e, { rect, tex } = {}) => {
 });
 
 ipcMain.handle('note:openExternal', (_e, url) => openExternal(url));
+
+/**
+ * Pops the application menu open at the toolbar button.
+ *
+ * frame: false means Windows and Linux draw no menu bar, so every command
+ * behind it was reachable only by a shortcut someone had to already know.
+ * The same menu, so accelerators and this stay in step by construction.
+ */
+ipcMain.on('app:show-menu', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const menu = Menu.getApplicationMenu();
+  if (win && menu) menu.popup({ window: win, x: 8, y: 26 });
+});
 
 ipcMain.handle('note:copyText', (_e, text) => clipboard.writeText(String(text)));
 

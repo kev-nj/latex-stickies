@@ -274,7 +274,7 @@ const SETTLE_MS = 1200;
  */
 function watch(onChanged) {
   let timer = null;
-  let watcher;
+  let watcher = null;
   try {
     watcher = fs.watch(DIR, (_event, filename) => {
       if (!filename || filename.startsWith('.') || filename.endsWith('.tmp')) return;
@@ -293,7 +293,16 @@ function watch(onChanged) {
   } catch (err) {
     console.error('could not watch the notes folder', err);
   }
-  return () => watcher && watcher.close();
+
+  // Returns a cleanup function. Both handles keep the event loop alive, so a
+  // watcher left open is enough to stop the process exiting after its last
+  // window closes -- which on Windows leaves the app running invisibly.
+  return () => {
+    clearTimeout(timer);
+    timer = null;
+    if (watcher) watcher.close();
+    watcher = null;
+  };
 }
 
 /** Forget everything cached, so the next read comes from disk. */

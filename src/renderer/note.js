@@ -170,6 +170,17 @@ COLORS.forEach((color) => {
   swatches.appendChild(el);
 });
 
+const menuButton = document.getElementById('menu');
+menuButton.addEventListener('click', () => window.sticky.openAppMenu());
+// Space and Enter reach a <button> natively, but only if it can be focused,
+// and the toolbar is inside a drag region that swallows plain clicks.
+menuButton.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    window.sticky.openAppMenu();
+  }
+});
+
 document.getElementById('add').addEventListener('click', () => window.sticky.create());
 document.getElementById('close').addEventListener('click', () => window.sticky.close());
 pin.addEventListener('click', () => {
