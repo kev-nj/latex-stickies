@@ -167,5 +167,9 @@ window.sticky.get().then((loaded) => {
     },
   });
 
+  // Caret at the end, not the start. At position 0 the caret sits inside the
+  // heading, which unfolds it -- so every note would open showing "# " before
+  // its title.
+  view.dispatch({ selection: { anchor: view.state.doc.length } });
   view.focus();
 });

@@ -17,6 +17,10 @@ const BODY = [
   '```python',
   'def f(): return 1',
   '```',
+  '',
+  // A plain last line, so the caret parking at the end of the document does
+  // not sit inside the code block and legitimately unfold it.
+  'done.',
 ].join('\n');
 contextBridge.exposeInMainWorld('sticky', {
   noteId: 'test',

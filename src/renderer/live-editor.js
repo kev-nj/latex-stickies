@@ -191,6 +191,20 @@ function buildDecorations(state) {
         const first = state.doc.lineAt(node.from).number;
         const last = state.doc.lineAt(node.to).number;
         for (let n = first; n <= last; n++) addLine(state.doc.line(n).from, cls);
+        if (node.name === 'FencedCode') {
+          addLine(state.doc.line(first).from, 'cm-md-code-first');
+          addLine(state.doc.line(last).from, 'cm-md-code-last');
+        }
+      }
+
+      // The ``` runs are punctuation, not content. Hide them unless the caret
+      // is in this block; the language name stays as the block's label.
+      if (node.name === 'CodeMark' && node.to - node.from >= 3) {
+        const fence = node.node.parent || node;
+        if (!cursorInside(fence.from, fence.to)) {
+          ranges.push({ from: node.from, to: node.to, value: HIDE });
+        }
+        return;
       }
 
       if (inMath(node.from)) return;
@@ -222,16 +236,16 @@ function buildDecorations(state) {
       if (node.name === 'ListMark') {
         const item = node.node.parent || node;
         const mark = state.doc.sliceString(node.from, node.to);
-        // A task item already shows a checkbox; a bullet as well is clutter.
+        if (!/^[-*+]$/.test(mark) || cursorInside(item.from, item.to)) return;
+
+        // A task item shows a checkbox; the dash as well is clutter, so it
+        // goes entirely rather than becoming a second marker.
         const isTask = /^\s*\[[ xX]\]/.test(state.doc.sliceString(node.to, node.to + 4));
-        // Ordered lists keep their numbers; only bullets get a dot.
-        if (/^[-*+]$/.test(mark) && !isTask && !cursorInside(item.from, item.to)) {
-          ranges.push({
-            from: node.from,
-            to: node.to,
-            value: Decoration.replace({ widget: new BulletWidget() }),
-          });
-        }
+        ranges.push({
+          from: node.from,
+          to: node.to,
+          value: isTask ? HIDE : Decoration.replace({ widget: new BulletWidget() }),
+        });
         return;
       }
 

@@ -38,7 +38,10 @@ app.whenReady().then(async () => {
     code: document.querySelectorAll('.cm-md-code').length,
     heading: document.querySelectorAll('.cm-md-h1').length,
     highlighted: document.querySelectorAll('.cm-md-code span[class]').length,
-    hidMarkers: !document.querySelector('.cm-content').innerText.includes('**bold**')
+    hidMarkers: !document.querySelector('.cm-content').innerText.includes('**bold**'),
+    proseFont: getComputedStyle(document.querySelector('.cm-line:not(.cm-md-code)')).fontFamily,
+    codeFont: getComputedStyle(document.querySelector('.cm-md-code')).fontFamily,
+    fenceTicks: document.querySelector('.cm-content').innerText.includes('\\u0060\\u0060\\u0060')
   })\`));
   app.exit(0);
 });
@@ -68,6 +71,10 @@ child.on('exit', () => {
     ['heading styled', r.heading >= 1],
     ['fenced code highlighted', r.highlighted > 0],
     ['emphasis markers hidden', r.hidMarkers],
+    // CodeMirror's base theme sets monospace on everything; prose must escape it.
+    ['prose is not monospace', !/mono/i.test(r.proseFont || '')],
+    ['code is monospace', /mono/i.test(r.codeFont || '')],
+    ['fence backticks hidden', r.fenceTicks === false],
   ];
   let bad = 0;
   for (const [name, ok] of checks) {

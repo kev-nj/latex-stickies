@@ -115,7 +115,11 @@ body.editing #tools > * { visibility: visible; }
 
 .cm-editor { background: transparent; height: auto; }
 .cm-editor.cm-focused { outline: none; }
-.cm-scroller {
+/* CodeMirror injects its own stylesheet when the view is created, which is
+   after this file loads, so its base theme wins on equal specificity. These
+   rules are scoped one level deeper to beat it -- otherwise the whole note
+   renders in CodeMirror's default monospace, prose included. */
+.cm-editor .cm-scroller {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: var(--fs, 15px);
   line-height: 1.55;
@@ -145,16 +149,28 @@ body.editing #tools > * { visibility: visible; }
   opacity: 0.85;
 }
 
-.cm-md-table {
+.cm-editor .cm-md-table {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.9em;
   background: rgba(0, 0, 0, 0.04);
 }
 
-.cm-md-code {
+.cm-editor .cm-md-code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.86em;
   background: rgba(0, 0, 0, 0.07);
+  padding-left: 9px;
+  padding-right: 9px;
+}
+/* The fence lines lose their backticks, so round the block off at both ends
+   rather than leaving two bare stripes. */
+.cm-editor .cm-md-code-first {
+  border-radius: 5px 5px 0 0;
+  padding-top: 5px;
+}
+.cm-editor .cm-md-code-last {
+  border-radius: 0 0 5px 5px;
+  padding-bottom: 5px;
 }
 
 .cm-bullet { opacity: 0.55; padding-right: 0.15em; }
