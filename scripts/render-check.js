@@ -41,7 +41,18 @@ app.whenReady().then(async () => {
     hidMarkers: !document.querySelector('.cm-content').innerText.includes('**bold**'),
     proseFont: getComputedStyle(document.querySelector('.cm-line:not(.cm-md-code)')).fontFamily,
     codeFont: getComputedStyle(document.querySelector('.cm-md-code')).fontFamily,
-    fenceTicks: document.querySelector('.cm-content').innerText.includes('\\u0060\\u0060\\u0060')
+    fenceTicks: document.querySelector('.cm-content').innerText.includes('\\u0060\\u0060\\u0060'),
+    copyButtons: document.querySelectorAll('.cm-copy').length,
+    copyOpacity: Number(getComputedStyle(document.querySelector('.cm-copy')).opacity),
+    titleIndent: document.querySelector('.cm-md-h1').innerText.startsWith(' '),
+    contentPad: parseFloat(getComputedStyle(document.querySelector('.cm-content')).paddingLeft),
+    headingUnderline: getComputedStyle(
+      document.querySelector('.cm-md-h1 span') || document.querySelector('.cm-md-h1')
+    ).textDecorationLine,
+    langLabel: document.querySelectorAll('.cm-code-lang').length,
+    tableEl: document.querySelectorAll('table.cm-table').length,
+    tableCells: document.querySelectorAll('.cm-table td').length,
+    tableHeaders: document.querySelectorAll('.cm-table th').length
   })\`));
   app.exit(0);
 });
@@ -75,6 +86,15 @@ child.on('exit', () => {
     ['prose is not monospace', !/mono/i.test(r.proseFont || '')],
     ['code is monospace', /mono/i.test(r.codeFont || '')],
     ['fence backticks hidden', r.fenceTicks === false],
+    ['copy button on the code block', r.copyButtons === 1],
+    ['copy button visible without hovering', r.copyOpacity > 0.2],
+    ['heading not indented by its hidden marker', r.titleIndent === false],
+    ['content inset from the window edge', r.contentPad >= 8],
+    ['headings are not underlined', !/underline/.test(r.headingUnderline || '')],
+    ['language name tagged as a label', r.langLabel === 1],
+    ['table drawn as a real table', r.tableEl === 1],
+    ['table has a header row', r.tableHeaders === 2],
+    ['table has its body cells', r.tableCells === 2],
   ];
   let bad = 0;
   for (const [name, ok] of checks) {

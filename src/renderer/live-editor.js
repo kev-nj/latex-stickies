@@ -105,6 +105,117 @@ class BulletWidget extends WidgetType {
   }
 }
 
+class CopyButtonWidget extends WidgetType {
+  constructor(code) {
+    super();
+    this.code = code;
+  }
+
+  eq(other) {
+    return other.code === this.code;
+  }
+
+  toDOM() {
+    const button = document.createElement('span');
+    button.className = 'cm-copy';
+    button.textContent = 'Copy';
+    button.title = 'Copy this block';
+    button.addEventListener('mousedown', (e) => {
+      // Keep CodeMirror from treating this as a click into the document.
+      e.preventDefault();
+      e.stopPropagation();
+      window.sticky.copy(this.code);
+      button.textContent = 'Copied';
+      button.classList.add('done');
+      setTimeout(() => {
+        button.textContent = 'Copy';
+        button.classList.remove('done');
+      }, 1200);
+    });
+    return button;
+  }
+
+  ignoreEvent() {
+    return true; // it is a button, not text
+  }
+}
+
+/**
+ * A markdown table, drawn as a real table.
+ *
+ * Rendered only while the caret is elsewhere; clicking in unfolds the pipes
+ * again, exactly as an equation does. That keeps the source directly editable
+ * without asking anyone to line up columns by eye to read them.
+ */
+class TableWidget extends WidgetType {
+  constructor(source) {
+    super();
+    this.source = source;
+  }
+
+  eq(other) {
+    return other.source === this.source;
+  }
+
+  toDOM() {
+    const table = document.createElement('table');
+    table.className = 'cm-table';
+
+    const rows = this.source.split('\n').filter((l) => l.trim());
+    // Row two is the delimiter: dashes, with optional colons for alignment.
+    const align = (rows[1] || '').split('|').slice(1, -1).map((cell) => {
+      const c = cell.trim();
+      if (c.startsWith(':') && c.endsWith(':')) return 'center';
+      if (c.endsWith(':')) return 'right';
+      return 'left';
+    });
+
+    rows.forEach((line, index) => {
+      if (index === 1) return; // the delimiter row is not content
+      const cells = line.split('|').slice(1, -1);
+      if (!cells.length) return;
+
+      const tr = document.createElement('tr');
+      cells.forEach((raw, column) => {
+        const cell = document.createElement(index === 0 ? 'th' : 'td');
+        cell.style.textAlign = align[column] || 'left';
+        fillCell(cell, raw.trim());
+        tr.appendChild(cell);
+      });
+      table.appendChild(tr);
+    });
+
+    return table;
+  }
+
+  ignoreEvent() {
+    return false; // a click puts the caret in, which unfolds the source
+  }
+}
+
+/** Writes cell text, rendering any inline maths it contains. */
+function fillCell(cell, text) {
+  let last = 0;
+  const inline = /(?<!\\)\$(?!\s)((?:\\.|[^$\\\n])*?[^\s\\]|[^\s$\\])\$/g;
+  let match;
+  while ((match = inline.exec(text)) !== null) {
+    if (match.index > last) {
+      cell.appendChild(document.createTextNode(text.slice(last, match.index)));
+    }
+    const span = document.createElement('span');
+    try {
+      katex.render(match[1], span, { throwOnError: true, strict: false, trust: false });
+    } catch (_) {
+      span.textContent = match[0]; // leave broken maths as its source
+    }
+    cell.appendChild(span);
+    last = match.index + match[0].length;
+  }
+  // Whatever is left is plain text, added as a text node so it can never be
+  // interpreted as markup.
+  if (last < text.length) cell.appendChild(document.createTextNode(text.slice(last)));
+}
+
 class RuleWidget extends WidgetType {
   eq() {
     return true;
@@ -186,6 +297,20 @@ function buildDecorations(state) {
   // --- everything else, from the markdown syntax tree ---
   syntaxTree(state).iterate({
     enter(node) {
+      if (node.name === 'Table' && !cursorInside(node.from, node.to)) {
+        const first = state.doc.lineAt(node.from);
+        const last = state.doc.lineAt(node.to);
+        ranges.push({
+          from: first.from,
+          to: last.to,
+          value: Decoration.replace({
+            widget: new TableWidget(state.doc.sliceString(first.from, last.to)),
+            block: true,
+          }),
+        });
+        return false; // nothing inside it needs decorating
+      }
+
       const cls = LINE_CLASS[node.name];
       if (cls) {
         const first = state.doc.lineAt(node.from).number;
@@ -194,7 +319,30 @@ function buildDecorations(state) {
         if (node.name === 'FencedCode') {
           addLine(state.doc.line(first).from, 'cm-md-code-first');
           addLine(state.doc.line(last).from, 'cm-md-code-last');
+
+          // Everything between the fences is the code itself.
+          const openLine = state.doc.line(first);
+          const body = first + 1 <= last - 1
+            ? state.doc.sliceString(state.doc.line(first + 1).from,
+                                    state.doc.line(last - 1).to)
+            : '';
+          if (body.trim()) {
+            ranges.push({
+              from: openLine.to,
+              to: openLine.to,
+              value: Decoration.widget({ widget: new CopyButtonWidget(body), side: 1 }),
+            });
+          }
         }
+      }
+
+      if (node.name === 'CodeInfo') {
+        ranges.push({
+          from: node.from,
+          to: node.to,
+          value: Decoration.mark({ class: 'cm-code-lang' }),
+        });
+        return;
       }
 
       // The ``` runs are punctuation, not content. Hide them unless the caret
@@ -262,9 +410,15 @@ function buildDecorations(state) {
 
       if (MARKS.has(node.name)) {
         const parent = node.node.parent || node;
-        if (!cursorInside(parent.from, parent.to)) {
-          ranges.push({ from: node.from, to: node.to, value: HIDE });
+        if (cursorInside(parent.from, parent.to)) return;
+
+        // Take the space that follows a heading or quote marker with it.
+        // Hiding "#" alone leaves the title indented by one space.
+        let to = node.to;
+        if (node.name === 'HeaderMark' || node.name === 'QuoteMark') {
+          while (state.doc.sliceString(to, to + 1) === ' ') to += 1;
         }
+        ranges.push({ from: node.from, to, value: HIDE });
       }
     },
   });
@@ -291,9 +445,12 @@ const livePreview = StateField.define({
 /* ---------- how markdown reads ---------- */
 
 const markdownStyle = HighlightStyle.define([
-  { tag: tags.heading1, fontSize: '1.35em', fontWeight: '600' },
-  { tag: tags.heading2, fontSize: '1.18em', fontWeight: '600' },
-  { tag: tags.heading3, fontSize: '1.05em', fontWeight: '600' },
+  // textDecoration: 'none' is deliberate -- defaultHighlightStyle, loaded for
+  // the colours inside code fences, underlines every heading.
+  { tag: tags.heading, textDecoration: 'none' },
+  { tag: tags.heading1, fontSize: '1.35em', fontWeight: '600', textDecoration: 'none' },
+  { tag: tags.heading2, fontSize: '1.18em', fontWeight: '600', textDecoration: 'none' },
+  { tag: tags.heading3, fontSize: '1.05em', fontWeight: '600', textDecoration: 'none' },
   { tag: tags.strong, fontWeight: '600' },
   { tag: tags.emphasis, fontStyle: 'italic' },
   { tag: tags.strikethrough, textDecoration: 'line-through', opacity: '0.6' },
@@ -349,7 +506,7 @@ function createLiveEditor({ parent, doc, onChange }) {
         Prec.high(keymap.of(shortcuts)),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         markdown({ base: markdownLanguage, codeLanguages }),
-        syntaxHighlighting(markdownStyle),
+        Prec.high(syntaxHighlighting(markdownStyle)),
         syntaxHighlighting(defaultHighlightStyle), // colours inside code fences
         livePreview,
         EditorView.lineWrapping,

@@ -125,12 +125,12 @@ body.editing #tools > * { visibility: visible; }
   line-height: 1.55;
   overflow-x: hidden;
 }
-.cm-content {
-  padding: 10px 13px 22px;
+.cm-editor .cm-content {
+  padding: 10px 12px 22px;
   caret-color: var(--ink);
   color: var(--ink);
 }
-.cm-line { padding: 0; }
+.cm-editor .cm-line { padding: 0; }
 .cm-cursor { border-left-color: var(--ink); }
 .cm-selectionBackground,
 .cm-editor ::selection { background: rgba(0, 0, 0, 0.14) !important; }
@@ -159,8 +159,20 @@ body.editing #tools > * { visibility: visible; }
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.86em;
   background: rgba(0, 0, 0, 0.07);
-  padding-left: 9px;
-  padding-right: 9px;
+  /* Negative margin pulls the tint just past the text, then padding puts the
+     code back where it was -- so the block reads as a panel with breathing
+     room, without the tint running into the window edge. */
+  margin: 0 2px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* The language name is a label, not a keyword: the default highlight style
+   colours it like code. */
+.cm-editor .cm-code-lang {
+  color: var(--ink) !important;
+  opacity: 0.45;
+  font-size: 0.9em;
 }
 /* The fence lines lose their backticks, so round the block off at both ends
    rather than leaving two bare stripes. */
@@ -171,6 +183,46 @@ body.editing #tools > * { visibility: visible; }
 .cm-editor .cm-md-code-last {
   border-radius: 0 0 5px 5px;
   padding-bottom: 5px;
+}
+
+/* Sits at the end of a block's opening fence line, beside the language name. */
+.cm-editor .cm-copy {
+  float: right;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  margin-right: 2px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--ink);
+  cursor: default;
+  transition: opacity 0.12s ease;
+
+  /* Always visible, just quiet. CodeMirror renders each line as its own
+     element with nothing wrapping the block, so there is no "hovering the
+     code block" to hang a reveal on -- keying it to the fence line alone made
+     the button findable only by someone who already knew it was there. */
+  opacity: 0.4;
+}
+.cm-editor .cm-md-code-first:hover .cm-copy { opacity: 0.75; }
+.cm-editor .cm-copy:hover { opacity: 1; background: rgba(0, 0, 0, 0.16); }
+.cm-editor .cm-copy.done { opacity: 1; background: rgba(47, 107, 74, 0.22); }
+
+.cm-editor .cm-table {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.93em;
+  max-width: 100%;
+}
+.cm-editor .cm-table th,
+.cm-editor .cm-table td {
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  padding: 3px 7px;
+}
+.cm-editor .cm-table th {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
 }
 
 .cm-bullet { opacity: 0.55; padding-right: 0.15em; }
