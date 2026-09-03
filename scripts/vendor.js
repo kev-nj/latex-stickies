@@ -79,3 +79,19 @@ console.log(
   `(core + ${PRISM_LANGUAGES.length} grammars, ` +
   `${(fs.statSync(path.join(OUT, 'prism.js')).size / 1024).toFixed(0)} KB)`
 );
+
+// CodeMirror ships ES modules only, and those cannot load over file:// under
+// the page's script-src 'self'. Roll them into one classic script.
+const cmOut = path.join(OUT, 'codemirror.js');
+require('esbuild').buildSync({
+  entryPoints: [path.join(ROOT, 'src', 'editor', 'entry.js')],
+  outfile: cmOut,
+  bundle: true,
+  format: 'iife',
+  minify: true,
+  target: 'chrome120',
+});
+console.log(
+  `codemirror.js   <- @codemirror/* ` +
+  `(${(fs.statSync(cmOut).size / 1024).toFixed(0)} KB)`
+);
