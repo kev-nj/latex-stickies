@@ -36,6 +36,7 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-install-'));
 // under test. store.js honours this; without it Electron resolves Documents
 // through the OS and a redirected HOME changes nothing.
 const notes = path.join(work, 'notes');
+const appDir = path.join(work, 'app');
 fs.mkdirSync(notes, { recursive: true });
 
 /**
@@ -88,7 +89,9 @@ const install = spawnSync('npm', [
 check('the tarball installs', install.status === 0, (install.stderr || '').slice(-300));
 
 const installed = path.join(prefix, 'lib', 'node_modules', 'latex-stickies');
-const appPath = path.join(installed, 'node_modules', 'electron', 'dist', 'Electron.app');
+// What a user launches is the branded copy, kept outside node_modules so it
+// survives npx cache churn and npm ci -- so that is what to inspect.
+const appPath = path.join(appDir, `${NAME}.app`);
 
 /* ---------- 3. launch it exactly as a user would ---------- */
 
@@ -96,7 +99,14 @@ const launcher = path.join(prefix, 'bin', 'latex-stickies');
 const run = spawnSync(launcher, [], {
   encoding: 'utf8',
   timeout: 180000, // a blocked postinstall means Electron downloads on first run
-  env: { ...process.env, LATEX_STICKIES_NOTES_DIR: notes },
+  env: {
+    ...process.env,
+    LATEX_STICKIES_NOTES_DIR: notes,
+    // Brand into the temp tree: the real one belongs to the user, and a
+    // check that overwrites it is testing the wrong thing anyway.
+    LATEX_STICKIES_APP_DIR: appDir,
+    LATEX_STICKIES_VERBOSE: '1',
+  },
 });
 const output = `${run.stdout || ''}${run.stderr || ''}`;
 // It is running now, detached. Everything below reads the bundle on disk,
@@ -126,12 +136,18 @@ check('the bundle has our identifier', read('CFBundleIdentifier') === APP_ID, re
 check('the executable is renamed', read('CFBundleExecutable') === NAME
   && fs.existsSync(path.join(appPath, 'Contents', 'MacOS', NAME)));
 
-// require('electron') reads path.txt, so it has to follow the rename -- this
-// is the check that catches an ENOENT launch before a user does.
-const pathTxt = path.join(installed, 'node_modules', 'electron', 'path.txt');
-check('path.txt follows the rename',
-  fs.existsSync(pathTxt) && fs.readFileSync(pathTxt, 'utf8').trim().endsWith(NAME),
-  fs.existsSync(pathTxt) ? fs.readFileSync(pathTxt, 'utf8').trim() : 'missing');
+// The vendored shell must be left exactly as npm installed it. Editing it in
+// place was the old approach, and npx installs under a fresh cache hash every
+// time, so the work was redone constantly and thrown away by any cache prune.
+const vendored = path.join(installed, 'node_modules', 'electron', 'dist', 'Electron.app');
+check('the vendored shell is left untouched',
+  fs.existsSync(path.join(vendored, 'Contents', 'MacOS', 'Electron')));
+
+// The bundle directory name matters as much as the plist: LaunchServices keys
+// records by path, and one already registered as "Electron" keeps serving that
+// name back however correct the plist becomes.
+check('the bundle directory carries our name', path.basename(appPath) === `${NAME}.app`
+  && fs.existsSync(appPath));
 
 // The icon in the bundle is what Finder, Cmd-Tab and the Dock show before the
 // app runs. Compare the bytes: CFBundleIconFile says which file is used and

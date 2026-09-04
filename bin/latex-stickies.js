@@ -10,36 +10,31 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-// Name the Electron shell before resolving it, not only at install time.
+// Brand before resolving anything: this returns the path to a copy of the
+// Electron shell carrying our name and icon, kept outside node_modules so it
+// survives npx cache churn and npm ci. Falls back to the plain shell, which
+// runs identically and only looks wrong in the Dock.
 //
-// postinstall scripts are increasingly blocked -- npm warns about them by
-// default now, and plenty of people and companies set ignore-scripts -- and a
-// user who installs with them off gets "Electron" in their Dock. Doing it here
-// as well means the name is right by the time macOS reads the bundle, whatever
-// happened during the install. It returns immediately once done.
-//
-// Strictly before require('electron'): branding renames the executable and
-// rewrites the path.txt that require reads, so a path captured first points at
-// a file that no longer exists and the launch fails with ENOENT. That cost a
-// release -- every first launch after upgrading failed, and only the second
-// worked.
+// postinstall cannot be relied on for this -- npm 11 warns about install
+// scripts by default and blocks them outright for global installs, and plenty
+// of people and companies turn them off.
+let electron = null;
 try {
-  require('../scripts/brand-electron.js');
-} catch (_) { /* cosmetic: never block a launch over the name */ }
+  electron = require('../scripts/brand-electron.js').ensure();
+} catch (err) {
+  console.error(`could not brand the app: ${err.message}`);
+}
 
-let electron;
-try {
-  // Branding resolved the electron module itself, so it is already in Node's
-  // module cache holding the path from before the rename. Drop it and read it
-  // again, or the launch spawns a file that no longer exists.
-  delete require.cache[require.resolve('electron')];
-  electron = require('electron');
-} catch (_) {
-  console.error(
-    'Could not find the Electron runtime.\n' +
-    'Reinstall with: npm install -g latex-stickies'
-  );
-  process.exit(1);
+if (!electron) {
+  try {
+    electron = require('electron');
+  } catch (_) {
+    console.error(
+      'Could not find the Electron runtime.\n' +
+      'Reinstall with: npm install -g latex-stickies'
+    );
+    process.exit(1);
+  }
 }
 
 const appDir = path.join(__dirname, '..');

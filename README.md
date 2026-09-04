@@ -24,7 +24,10 @@ latex-stickies
 ```
 
 Requires Node 22.12 or newer. The first run downloads the Electron runtime
-(~230 MB), so give it a minute; later launches are instant. On a Mac you can
+(~230 MB), so give it a minute; later launches are instant. On a Mac it also
+keeps a copy of the runtime carrying this app's name and icon in
+`~/Library/Application Support/latex-stickies/` -- on APFS that is a
+copy-on-write clone, so it costs almost no disk. On a Mac you can
 download a `.dmg` from [Releases](https://github.com/kev-nj/latex-stickies/releases)
 instead and skip Node entirely.
 
