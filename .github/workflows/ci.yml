@@ -88,3 +88,13 @@ jobs:
       - name: Autocomplete suggestions
         if: runner.os != 'Linux'
         run: node scripts/ghost-check.js
+
+      # What a user actually installs, which nothing else here exercises: a
+      # checkout runs from source and a built .app is branded by
+      # electron-builder, so six releases in a row shipped a Dock name or icon
+      # that was wrong on other machines and right on the one that built it.
+      # macOS only -- it is the only platform with a bundle to brand.
+      - name: Verify the install path
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        run: npm run verify

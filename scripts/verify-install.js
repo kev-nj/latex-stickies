@@ -38,11 +38,19 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-install-'));
 const notes = path.join(work, 'notes');
 fs.mkdirSync(notes, { recursive: true });
 
-let child = null;
+/**
+ * The launcher spawns Electron detached, so it outlives this script.
+ *
+ * Nothing else will clean it up: it is not our child, and on CI a stray
+ * process holding the runner is how a green job turns into a hung one. Match
+ * on the temp prefix, which no other copy on the machine can share.
+ */
+function killTheInstalledApp() {
+  spawnSync('pkill', ['-f', work], { stdio: 'ignore' });
+}
+
 process.on('exit', () => {
-  if (child && !child.killed) {
-    try { process.kill(-child.pid, 'SIGKILL'); } catch (_) { /* gone */ }
-  }
+  killTheInstalledApp();
   try { fs.rmSync(work, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 });
 
@@ -91,6 +99,9 @@ const run = spawnSync(launcher, [], {
   env: { ...process.env, LATEX_STICKIES_NOTES_DIR: notes },
 });
 const output = `${run.stdout || ''}${run.stderr || ''}`;
+// It is running now, detached. Everything below reads the bundle on disk,
+// which does not need it alive.
+killTheInstalledApp();
 // The first launch is the one that matters. It failed for a whole release --
 // branding renamed the executable after the launcher had already resolved it.
 check('the first launch does not error', run.status === 0 && !/Failed to launch|ENOENT/.test(output),
