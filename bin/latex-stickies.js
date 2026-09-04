@@ -21,6 +21,16 @@ try {
   process.exit(1);
 }
 
+// Name the Electron shell before launching it, not only at install time.
+// postinstall scripts are increasingly blocked -- npm warns about them by
+// default now, and plenty of people and companies set ignore-scripts -- and a
+// user who installs with them off gets "Electron" in their Dock. Doing it here
+// as well means the name is right by the time macOS reads the bundle, whatever
+// happened during the install. It returns immediately once done.
+try {
+  require('../scripts/brand-electron.js');
+} catch (_) { /* cosmetic: never block a launch over the name */ }
+
 const appDir = path.join(__dirname, '..');
 const child = spawn(electron, [appDir, ...process.argv.slice(2)], {
   detached: true,

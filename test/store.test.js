@@ -160,6 +160,31 @@ const LEGACY = [
   fs.rmSync(base, { recursive: true, force: true });
 }
 
+/* ---------- one note, one file ---------- */
+
+// A real report: a user retitled one note and the All Notes menu filled up
+// with copies of it. Retitling renames the file at once, so anything that
+// reloaded before the debounced index write found a file the index had never
+// heard of, gave it a fresh id, and orphaned the window still holding the old
+// one -- whose next keystroke wrote a second copy.
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'X', body: '# Banana' });   // a window opens it
+    store.saveNow();
+    store.upsert({ id: 'X', body: '# Banana2' });  // the user retitles it
+    store.reload();                                // the watcher reloads
+    const ids = store.all().map((n) => n.id);
+    store.upsert({ id: 'X', body: '# Banana2 more' }); // the window types on
+    store.saveNow();
+    out({ ids, files: fs.readdirSync(DIR).filter((f) => f.endsWith('.md')) });
+  `);
+  check('the note keeps its id across a reload after a retitle',
+    result.ids.length === 1 && result.ids[0] === 'X');
+  check('retitling a note does not fork it into two files',
+    result.files.length === 1 && result.files[0] === 'banana2-more.md');
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
 /* ---------- deletion ---------- */
 
 {

@@ -173,15 +173,10 @@ function writeIndex(meta) {
   }
 }
 
-function flush() {
-  timer = null;
+/** The sidecar index alone: filenames to ids, colours, bounds. */
+function flushIndex() {
   const meta = {};
   for (const note of all()) {
-    try {
-      writeFileAtomic(path.join(DIR, note.file), note.body || '');
-    } catch (err) {
-      console.error(`failed to save ${note.file}`, err);
-    }
     meta[note.file] = {
       id: note.id,
       color: note.color,
@@ -191,6 +186,18 @@ function flush() {
     };
   }
   writeIndex(meta);
+}
+
+function flush() {
+  timer = null;
+  for (const note of all()) {
+    try {
+      writeFileAtomic(path.join(DIR, note.file), note.body || '');
+    } catch (err) {
+      console.error(`failed to save ${note.file}`, err);
+    }
+  }
+  flushIndex();
 }
 
 // Writes are frequent (every keystroke, every window drag), so coalesce them.
@@ -234,8 +241,23 @@ function upsert(note) {
     const next = slugFor(list[i].body, taken, path.extname(before.file) || '.md');
     try {
       const from = path.join(DIR, before.file);
+      // Both names count as our own writing, or the rename looks like an
+      // outside edit and the watcher reloads over the top of it.
+      justWrote.set(before.file, Date.now());
+      justWrote.set(next, Date.now());
       if (fs.existsSync(from)) fs.renameSync(from, path.join(DIR, next));
       list[i].file = next;
+      // Write this note's body now too. The rename is immediate but the body
+      // is on the 400ms timer, so a reload in between would read the new file
+      // and find the old text -- after which the filename stops following the
+      // title, because it no longer looks like a name we chose.
+      writeFileAtomic(path.join(DIR, next), list[i].body || '');
+      // The index must follow the rename at once, not on the 400ms timer.
+      // A note's id lives in the index, keyed by filename; anything that
+      // reloads in the gap finds a file the index has never heard of, gives
+      // it a fresh id, and orphans the window still holding the old one --
+      // whose next keystroke then writes a second copy of the same note.
+      flushIndex();
     } catch (err) {
       console.error(`could not rename ${before.file} to ${next}`, err);
     }
