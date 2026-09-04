@@ -473,11 +473,23 @@ let quitting = false;
  */
 function prepareToExit() {
   quitting = true;
-  if (stopWatchingNotes) {
-    stopWatchingNotes();
-    stopWatchingNotes = null;
+  // Nothing here may throw. The caller's next statement is process.exit(), and
+  // an exception thrown on the way out skips it -- leaving exactly the
+  // invisible, unreachable process this whole path exists to prevent. Saving
+  // is worth attempting; it is not worth staying alive for.
+  try {
+    if (stopWatchingNotes) {
+      stopWatchingNotes();
+      stopWatchingNotes = null;
+    }
+  } catch (err) {
+    console.error('could not stop watching the notes folder', err);
   }
-  store.saveNow();
+  try {
+    store.saveNow();
+  } catch (err) {
+    console.error('could not save on the way out', err);
+  }
 }
 
 function watchNotesFolder() {
