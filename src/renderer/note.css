@@ -270,7 +270,10 @@ body.editing #tools > * { visibility: visible; }
 .cm-editor .cm-ghost {
   opacity: 0.42;
   font-style: italic;
-  white-space: pre;
+  /* pre-wrap, not pre: a suggestion is often a whole sentence, and `pre` ran it
+     straight out past the right edge of the note where it could not be read. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .cm-editor .cm-inline-code {
