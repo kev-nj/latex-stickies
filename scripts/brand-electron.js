@@ -42,7 +42,15 @@ function main() {
     }
   };
 
-  if (read('CFBundleName') === NAME) return; // already done
+  if (read('CFBundleName') === NAME) {
+    // Say so rather than exiting in silence. A user reporting "the Dock still
+    // says Electron" needs to know whether the rename failed or whether they
+    // are looking at an older instance still holding the single-instance lock.
+    if (process.env.LATEX_STICKIES_VERBOSE) {
+      console.log(`the Electron shell is already named "${NAME}"`);
+    }
+    return;
+  }
 
   const backup = fs.readFileSync(plist);
   try {
