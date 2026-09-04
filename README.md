@@ -1,9 +1,16 @@
 # LaTeX Stickies
 
+[![npm](https://img.shields.io/npm/v/latex-stickies)](https://www.npmjs.com/package/latex-stickies)
+[![CI](https://github.com/kev-nj/latex-stickies/actions/workflows/ci.yml/badge.svg)](https://github.com/kev-nj/latex-stickies/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/latex-stickies)](LICENSE)
+
 Sticky notes for your desktop that render LaTeX and Markdown as you type.
+macOS, Windows and Linux.
 
 Write `$e^{i\pi} + 1 = 0$` and it becomes the equation. Click into it and the
 source comes back. There is no edit mode and no preview mode.
+
+<img src="https://raw.githubusercontent.com/kev-nj/latex-stickies/main/assets/demo.gif" alt="Typing maths, a table, a code block and an autocompleted equation into a note" width="420">
 
 ```
 npx latex-stickies
@@ -137,6 +144,7 @@ npm start        # run from source
 npm test         # unit suites
 npm run vendor   # rebuild the bundled libraries
 npm run icon     # rebuild the app icon from assets/icon-master.png
+npm run demo     # re-record assets/demo.gif from the real app (needs ffmpeg)
 npm run dist     # build a macOS .app and .dmg
 ```
 
