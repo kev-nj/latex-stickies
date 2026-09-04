@@ -30,7 +30,8 @@
         "zip"
       ],
       "icon": "build/icon.icns"
-    }
+    },
+    "afterPack": "scripts/after-pack.js"
   },
   "devDependencies": {
     "@codemirror/commands": "^6.11.0",

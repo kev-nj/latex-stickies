@@ -29,7 +29,8 @@ keeps a copy of the runtime carrying this app's name and icon in
 `~/Library/Application Support/latex-stickies/` -- on APFS that is a
 copy-on-write clone, so it costs almost no disk. On a Mac you can
 download a `.dmg` from [Releases](https://github.com/kev-nj/latex-stickies/releases)
-instead and skip Node entirely.
+instead and skip Node entirely. It is not signed by Apple, so the first launch
+needs a right-click on the app and **Open** rather than a double-click.
 
 ## Writing in a note
 

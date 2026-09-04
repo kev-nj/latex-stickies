@@ -56,6 +56,34 @@ try {
 
   const result = spawnSync('npx', args, { stdio: 'inherit' });
   process.exitCode = result.status ?? 1;
+  if (result.status === 0) verifySignature();
 } finally {
   restore();
+}
+
+/**
+ * Refuses to leave a build that macOS will call damaged.
+ *
+ * A .dmg shipped with a signature that did not match its contents, and the
+ * only dialog a downloader got was "damaged and can't be opened" with a Move
+ * to Bin button. It looked fine on the machine that built it, because
+ * installing locally strips the quarantine flag that triggers the check.
+ */
+function verifySignature() {
+  if (process.platform !== 'darwin') return;
+  const app = path.join(
+    __dirname, '..', 'dist', `mac-${process.arch}`, 'LaTeX Stickies.app'
+  );
+  if (!fs.existsSync(app)) return;
+
+  const check = spawnSync('codesign', ['--verify', '--deep', '--strict', app], {
+    encoding: 'utf8',
+  });
+  if (check.status !== 0) {
+    console.error(`\nthe built app is not validly signed:\n${check.stderr}`);
+    console.error('macOS would call this download damaged. Not shipping it.');
+    process.exitCode = 1;
+    return;
+  }
+  console.log('  • signature verified');
 }
