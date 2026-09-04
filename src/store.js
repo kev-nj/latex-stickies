@@ -25,7 +25,7 @@ const INDEX = path.join(DIR, '.stickies.json');
 /** The old single-file store, migrated from once and then left alone. */
 const LEGACY = path.join(app.getPath('userData'), 'notes.json');
 
-const DEFAULTS = { color: 'yellow', fontSize: 15, alwaysOnTop: false };
+const DEFAULTS = { color: 'yellow', fontSize: 15, alwaysOnTop: false, open: true };
 
 let notes = null; // [{ id, file, body, color, fontSize, alwaysOnTop, bounds }]
 let timer = null;
@@ -94,6 +94,9 @@ function load() {
       ...saved,
       // The file is the source of truth for content; the index only decorates.
       id: saved.id || file,
+      // A file that appeared in the folder from outside has no index entry,
+      // and should show itself rather than stay invisible.
+      open: saved.open !== false,
       file,
       body,
     };
@@ -183,6 +186,7 @@ function flushIndex() {
       fontSize: note.fontSize,
       alwaysOnTop: note.alwaysOnTop,
       bounds: note.bounds,
+      open: note.open !== false,
     };
   }
   writeIndex(meta);

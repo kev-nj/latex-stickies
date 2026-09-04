@@ -88,7 +88,7 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 | | |
 |---|---|
 | `Cmd+N` | New note |
-| `Cmd+W` | Close note (it reopens next launch) |
+| `Cmd+W` | Close note (it stays closed until you reopen it) |
 | `Cmd+Shift+Backspace` | Delete note, permanently |
 | `Cmd+B` / `Cmd+I` / `Cmd+E` | Bold / italic / code |
 | `Cmd+K` | Link |
@@ -103,8 +103,9 @@ On Windows and Linux the note windows have no menu bar, so the **☰** button
 in a note's toolbar opens the same menu. Every command is there.
 
 The **All Notes** menu lists every note you have. A tick means it is on screen;
-click to open a note, or click a ticked one to close it. So a note you closed
-is one click away rather than lost until the next launch.
+click to open a note, or click a ticked one to close it. Closing a note is
+remembered, so the desk you left is the desk you come back to -- the app
+reopens what was on screen rather than every note you have ever written.
 
 ## Where notes live
 

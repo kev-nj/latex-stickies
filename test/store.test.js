@@ -185,6 +185,28 @@ const LEGACY = [
   fs.rmSync(base, { recursive: true, force: true });
 }
 
+/* ---------- what was on screen ---------- */
+
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'a', body: '# Kept open' });
+    store.upsert({ id: 'b', body: '# Closed' });
+    store.saveNow();
+    store.upsert({ id: 'b', open: false });
+    store.saveNow();
+    store.reload();
+    const byId = Object.fromEntries(store.all().map((n) => [n.id, n.open]));
+    // A file someone dropped into the folder has no index entry at all.
+    fs.writeFileSync(path.join(DIR, 'dropped-in.md'), '# From elsewhere');
+    const dropped = store.reload().find((n) => n.file === 'dropped-in.md');
+    out({ byId, dropped: dropped.open });
+  `);
+  check('a note left open reopens', result.byId.a === true);
+  check('a note closed on purpose stays closed', result.byId.b === false);
+  check('a note dropped into the folder shows itself', result.dropped === true);
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
 /* ---------- deletion ---------- */
 
 {

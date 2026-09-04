@@ -128,6 +128,8 @@ function openNote(note) {
     return existing;
   }
 
+  store.upsert({ id: note.id, open: true });
+
   const win = new BrowserWindow({
     ...onScreenBounds(note.bounds),
     minWidth: 220,
@@ -157,6 +159,11 @@ function openNote(note) {
   win.on('closed', () => {
     windows.delete(note.id);
     smokeLog(`windows=${windows.size}`);
+
+    // Closing a note is a decision that should survive a restart. Quitting is
+    // not: an app that shuts down closes every window, and treating that as
+    // "the user closed them all" would greet them with an empty desk.
+    if (!quitting) store.upsert({ id: note.id, open: false });
 
     // macOS apps outlive their windows; the Dock icon is the way back.
     // Elsewhere there is no way back, so an app with no windows is just an
@@ -205,13 +212,24 @@ function createNote(seed = {}) {
   return note;
 }
 
+/**
+ * Opens the notes that were on screen when the app was last used.
+ *
+ * Not every note: someone with thirty notes and three on screen wants three
+ * windows back, and reopening all of them made closing one pointless. A note
+ * closed on purpose stays closed until it is opened again from All Notes.
+ */
 function restoreNotes() {
   const notes = store.all();
   if (notes.length === 0) {
     createNote({ body: WELCOME });
     return;
   }
-  notes.forEach(openNote);
+
+  const open = notes.filter((n) => n.open !== false);
+  // Never nothing. A launch that puts no window on screen looks like a failed
+  // launch, and on Windows it leaves an invisible process with no way back.
+  (open.length ? open : [notes[notes.length - 1]]).forEach(openNote);
 }
 
 const { WELCOME } = require('./welcome');
@@ -442,6 +460,8 @@ app.on('second-instance', surfaceNotes);
  * quietly overwriting what was changed on disk.
  */
 let stopWatchingNotes = null;
+/** Set while the app is shutting down, so closing windows is not a choice. */
+let quitting = false;
 
 /**
  * Everything that must happen before the process goes away.
@@ -452,6 +472,7 @@ let stopWatchingNotes = null;
  * process -- alive after the last window has gone.
  */
 function prepareToExit() {
+  quitting = true;
   if (stopWatchingNotes) {
     stopWatchingNotes();
     stopWatchingNotes = null;
