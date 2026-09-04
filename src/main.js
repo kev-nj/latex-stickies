@@ -490,12 +490,16 @@ function watchNotesFolder() {
 }
 
 app.whenReady().then(async () => {
-  // Run from npm there is no .app bundle to carry the icon, so macOS would show
-  // the generic Electron atom in the Dock. Set it explicitly.
-  // Only when running from source or from npm. A packaged app already carries
-  // its icon in the bundle, and build/ is not shipped inside it -- trying
-  // anyway logged a missing-file error on every launch of the built app.
-  if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
+  // Run from npm there is no .app bundle of our own to carry the icon, so
+  // macOS would show the generic Electron atom in the Dock. Set it explicitly.
+  //
+  // Keyed on the file existing, not on app.isPackaged. Naming the Dock entry
+  // means renaming the executable inside the vendored Electron.app, and
+  // isPackaged is derived from that executable's name -- so an npm install
+  // started reporting itself as packaged, this branch stopped running, and
+  // fixing the name cost the icon. A packaged build has no build/ directory
+  // inside it, which is the same condition, tested directly.
+  if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON)) {
     try {
       const image = nativeImage.createFromBuffer(fs.readFileSync(ICON));
       if (!image.isEmpty()) app.dock.setIcon(image);
