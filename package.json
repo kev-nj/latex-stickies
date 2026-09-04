@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node scripts/test.js",
+    "verify": "node scripts/verify-install.js",
     "vendor": "node scripts/vendor.js",
     "icon": "node scripts/make-icon.js",
     "demo": "node scripts/make-demo.js",

@@ -146,6 +146,7 @@ npm test         # unit suites
 npm run vendor   # rebuild the bundled libraries
 npm run icon     # rebuild the app icon from assets/icon-master.png
 npm run demo     # re-record assets/demo.gif from the real app (needs ffmpeg)
+npm run verify   # install the packed tarball and check what a user gets
 npm run dist     # build a macOS .app and .dmg
 ```
 
@@ -158,6 +159,7 @@ node scripts/smoke.js --lifecycle # closing every note behaves per platform
 node scripts/render-check.js      # the first-run note renders correctly
 node scripts/ghost-check.js       # autocomplete suggests, and Tab accepts
 node scripts/snapshot-check.js    # a long note is captured whole
+node scripts/verify-install.js    # the install path, end to end (macOS)
 ```
 
 The renderer loads over `file://` under a strict content-security policy, so

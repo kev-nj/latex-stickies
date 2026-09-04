@@ -20,7 +20,16 @@ const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const DIR = path.join(app.getPath('documents'), 'LaTeX Stickies');
+/**
+ * Where the notes live.
+ *
+ * The override exists for harnesses. On macOS Electron resolves the documents
+ * folder through the OS rather than $HOME, so a test that redirects HOME still
+ * reads and writes the real notes -- which is how a verification run ended up
+ * touching them.
+ */
+const DIR = process.env.LATEX_STICKIES_NOTES_DIR
+  || path.join(app.getPath('documents'), 'LaTeX Stickies');
 const INDEX = path.join(DIR, '.stickies.json');
 /** The old single-file store, migrated from once and then left alone. */
 const LEGACY = path.join(app.getPath('userData'), 'notes.json');
