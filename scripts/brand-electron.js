@@ -18,6 +18,17 @@ const fs = require('fs');
 const path = require('path');
 
 const NAME = 'LaTeX Stickies';
+/**
+ * Our own bundle identifier, matching the packaged builds.
+ *
+ * The Electron shell ships as com.github.Electron, and LaunchServices keys its
+ * database by identifier rather than by path. So on a machine that has seen any
+ * other Electron -- another project's node_modules, an old npx copy, a
+ * different Electron app entirely -- the Dock can serve that record's name,
+ * "Electron", however carefully this script renames our copy. Taking our own
+ * identifier is what stops the collision; renaming alone cannot.
+ */
+const APP_ID = 'com.kevinjusak.latexsticky';
 
 /**
  * Makes LaunchServices re-read a bundle.
@@ -61,7 +72,7 @@ function main() {
     }
   };
 
-  if (read('CFBundleName') === NAME) {
+  if (read('CFBundleName') === NAME && read('CFBundleIdentifier') === APP_ID) {
     // Already named, so a wrong name in the Dock can only be a stale cache.
     refreshLaunchServices(appPath);
     // Say so rather than exiting in silence. A user reporting "the Dock still
@@ -75,11 +86,16 @@ function main() {
 
   const backup = fs.readFileSync(plist);
   try {
-    for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
+    const fields = [
+      ['CFBundleName', NAME],
+      ['CFBundleDisplayName', NAME],
+      ['CFBundleIdentifier', APP_ID],
+    ];
+    for (const [key, value] of fields) {
       try {
-        execFileSync('plutil', ['-replace', key, '-string', NAME, plist]);
+        execFileSync('plutil', ['-replace', key, '-string', value, plist]);
       } catch (_) {
-        execFileSync('plutil', ['-insert', key, '-string', NAME, plist]);
+        execFileSync('plutil', ['-insert', key, '-string', value, plist]);
       }
     }
 
