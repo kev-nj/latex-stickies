@@ -4,19 +4,21 @@
  *
  *   assets/logo.jpeg       original artwork, yellow tile on a blue field
  *   assets/icon-master.png the prepared master: tile cropped out, transparent
- *                          ground, art filling the whole 1024 canvas
+ *                          ground, art masked to an 824 squircle in 1024
  *   build/icon.icns        what electron-builder puts in the .app
  *   build/icon.png         what app.dock.setIcon() uses when run from npm
  *
- * The artwork is full-bleed, which is a deliberate break from the old
- * 824-of-1024 padding convention. macOS 26 masks every legacy icon into its
- * own rounded square, so a padded icon that already has rounded corners gets a
- * second set drawn around it and sits inside a visible white plate. Filling
- * the canvas lets that mask clip our own edges instead.
+ * The 824-of-1024 proportion is the macOS convention, and it is what keeps an
+ * icon at the same visual weight as Finder and Safari -- full-bleed art is
+ * plainly larger than its neighbours in the Dock. But under macOS 26 the size
+ * is only half of it: the system draws a rounded plate behind every legacy
+ * icon, so art that leaves transparent margins inside that 824 square shows
+ * the plate as a white frame around itself. The master is therefore scaled to
+ * cover the square and masked to Apple's squircle, filling the plate exactly.
  *
  * Uses only sips and iconutil, both of which ship with macOS, so there is no
  * toolchain to install. To change the logo, replace icon-master.png with a
- * 1024x1024 transparent PNG whose art reaches all four edges, then run this.
+ * 1024x1024 PNG holding an 824 squircle of art, centred, then run this.
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');

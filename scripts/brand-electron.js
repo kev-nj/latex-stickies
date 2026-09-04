@@ -19,6 +19,25 @@ const path = require('path');
 
 const NAME = 'LaTeX Stickies';
 
+/**
+ * Makes LaunchServices re-read a bundle.
+ *
+ * It caches an app's name from the first time it sees the path, and npm
+ * extracts Electron under a directory macOS indexes -- so it can record
+ * "Electron" before this script ever runs, and then keep showing that in the
+ * Dock however right the plist is. Renaming alone is not enough.
+ */
+function refreshLaunchServices(appPath) {
+  try {
+    execFileSync(
+      '/System/Library/Frameworks/CoreServices.framework/Frameworks'
+      + '/LaunchServices.framework/Support/lsregister',
+      ['-f', appPath],
+      { stdio: 'ignore', timeout: 10000 }
+    );
+  } catch (_) { /* the name is still right; only the cache is stale */ }
+}
+
 function main() {
   if (process.platform !== 'darwin') return; // only macOS names apps this way
 
@@ -43,6 +62,8 @@ function main() {
   };
 
   if (read('CFBundleName') === NAME) {
+    // Already named, so a wrong name in the Dock can only be a stale cache.
+    refreshLaunchServices(appPath);
     // Say so rather than exiting in silence. A user reporting "the Dock still
     // says Electron" needs to know whether the rename failed or whether they
     // are looking at an older instance still holding the single-instance lock.
@@ -73,6 +94,8 @@ function main() {
       stdio: 'ignore',
     });
     execFileSync('codesign', ['--verify', appPath], { stdio: 'ignore' });
+
+    refreshLaunchServices(appPath);
 
     console.log(`named the Electron shell "${NAME}"`);
   } catch (err) {
