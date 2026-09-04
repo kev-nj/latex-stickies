@@ -4,17 +4,19 @@
  *
  *   assets/logo.jpeg       original artwork, yellow tile on a blue field
  *   assets/icon-master.png the prepared master: tile cropped out, transparent
- *                          ground, art filling 824 of a 1024 canvas
+ *                          ground, art filling the whole 1024 canvas
  *   build/icon.icns        what electron-builder puts in the .app
  *   build/icon.png         what app.dock.setIcon() uses when run from npm
  *
- * The 824-of-1024 proportion is the macOS convention. Icons are not full-bleed:
- * the padding is what makes every icon in the Dock read at the same visual
- * weight, and artwork that ignores it looks oversized next to Finder and Safari.
+ * The artwork is full-bleed, which is a deliberate break from the old
+ * 824-of-1024 padding convention. macOS 26 masks every legacy icon into its
+ * own rounded square, so a padded icon that already has rounded corners gets a
+ * second set drawn around it and sits inside a visible white plate. Filling
+ * the canvas lets that mask clip our own edges instead.
  *
  * Uses only sips and iconutil, both of which ship with macOS, so there is no
  * toolchain to install. To change the logo, replace icon-master.png with a
- * 1024x1024 transparent PNG that already has that padding, then run this.
+ * 1024x1024 transparent PNG whose art reaches all four edges, then run this.
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
