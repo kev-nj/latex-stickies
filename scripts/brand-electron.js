@@ -49,6 +49,35 @@ function refreshLaunchServices(appPath) {
   } catch (_) { /* the name is still right; only the cache is stale */ }
 }
 
+/**
+ * Puts our icon in the bundle, and says whether it had to.
+ *
+ * The bundle icon is what macOS shows before the app is running -- in Finder,
+ * in Cmd-Tab, and in the Dock at launch -- so app.dock.setIcon() alone is not
+ * enough. Compared byte for byte rather than copied blindly, because a copy
+ * invalidates the signature and costs a re-sign every launch.
+ */
+function copyIcon(appPath) {
+  const icon = path.join(__dirname, '..', 'build', 'icon.icns');
+  const target = path.join(appPath, 'Contents', 'Resources', 'electron.icns');
+  if (!fs.existsSync(icon) || !fs.existsSync(target)) return false;
+  if (fs.readFileSync(icon).equals(fs.readFileSync(target))) return false;
+  fs.copyFileSync(icon, target);
+  return true;
+}
+
+/**
+ * Re-signs the bundle. Required, not optional: any edit under Contents/
+ * invalidates the ad-hoc signature, and macOS refuses to launch a bundle whose
+ * signature does not match its contents.
+ */
+function resign(appPath) {
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], {
+    stdio: 'ignore',
+  });
+  execFileSync('codesign', ['--verify', appPath], { stdio: 'ignore' });
+}
+
 function main() {
   if (process.platform !== 'darwin') return; // only macOS names apps this way
 
@@ -76,7 +105,16 @@ function main() {
   if (read('CFBundleName') === NAME
       && read('CFBundleIdentifier') === APP_ID
       && fs.existsSync(binary)) {
-    // Already named, so a wrong name in the Dock can only be a stale cache.
+    // Named already, but the icon may still be an old one: someone who
+    // installed an earlier version has a bundle branded with that version's
+    // artwork, and every upgrade since has taken this path and left it there.
+    if (copyIcon(appPath)) {
+      resign(appPath);
+      refreshLaunchServices(appPath);
+      console.log('updated the icon on the Electron shell');
+      return;
+    }
+    // Otherwise a wrong name in the Dock can only be a stale cache.
     refreshLaunchServices(appPath);
     // Say so rather than exiting in silence. A user reporting "the Dock still
     // says Electron" needs to know whether the rename failed or whether they
@@ -118,18 +156,8 @@ function main() {
       fs.writeFileSync(pathTxt, `Electron.app/Contents/MacOS/${NAME}`);
     }
 
-    // The bundle icon is what shows before the app can set its own.
-    const icon = path.join(__dirname, '..', 'build', 'icon.icns');
-    const target = path.join(appPath, 'Contents', 'Resources', 'electron.icns');
-    if (fs.existsSync(icon) && fs.existsSync(target)) fs.copyFileSync(icon, target);
-
-    // Required: the edits above invalidate the ad-hoc signature, and macOS
-    // refuses to launch a bundle whose signature does not match its contents.
-    execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], {
-      stdio: 'ignore',
-    });
-    execFileSync('codesign', ['--verify', appPath], { stdio: 'ignore' });
-
+    copyIcon(appPath);
+    resign(appPath);
     refreshLaunchServices(appPath);
 
     console.log(`named the Electron shell "${NAME}"`);
