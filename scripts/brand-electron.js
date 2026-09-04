@@ -72,7 +72,10 @@ function main() {
     }
   };
 
-  if (read('CFBundleName') === NAME && read('CFBundleIdentifier') === APP_ID) {
+  const binary = path.join(appPath, 'Contents', 'MacOS', NAME);
+  if (read('CFBundleName') === NAME
+      && read('CFBundleIdentifier') === APP_ID
+      && fs.existsSync(binary)) {
     // Already named, so a wrong name in the Dock can only be a stale cache.
     refreshLaunchServices(appPath);
     // Say so rather than exiting in silence. A user reporting "the Dock still
@@ -90,6 +93,7 @@ function main() {
       ['CFBundleName', NAME],
       ['CFBundleDisplayName', NAME],
       ['CFBundleIdentifier', APP_ID],
+      ['CFBundleExecutable', NAME],
     ];
     for (const [key, value] of fields) {
       try {
@@ -97,6 +101,21 @@ function main() {
       } catch (_) {
         execFileSync('plutil', ['-insert', key, '-string', value, plist]);
       }
+    }
+
+    // Rename the executable too. macOS takes the Dock label from the running
+    // executable, not only from the plist -- which is why the packaged builds
+    // have always shown the right name (electron-builder renames it) while
+    // every npm install showed "Electron" however the plist was rewritten.
+    const oldBinary = path.join(appPath, 'Contents', 'MacOS', 'Electron');
+    if (fs.existsSync(oldBinary) && !fs.existsSync(binary)) {
+      fs.renameSync(oldBinary, binary);
+    }
+    // require('electron') reads this file for the path it returns, so it has
+    // to follow the rename or every launcher breaks.
+    const pathTxt = path.join(path.dirname(appPath), '..', 'path.txt');
+    if (fs.existsSync(pathTxt)) {
+      fs.writeFileSync(pathTxt, `Electron.app/Contents/MacOS/${NAME}`);
     }
 
     // The bundle icon is what shows before the app can set its own.
