@@ -362,3 +362,32 @@ body.capturing-note #preview [data-math].capturing {
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.16); border-radius: 4px; }
+
+/* The file changed underneath unsaved edits. Sits over the note rather than
+   interrupting it: the text stays editable while the choice is on screen. */
+#conflict {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  font-size: 12px;
+  z-index: 5;
+}
+#conflict span { flex: 1; }
+#conflict button {
+  font: inherit;
+  color: inherit;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+#conflict button:hover { background: rgba(255, 255, 255, 0.16); }

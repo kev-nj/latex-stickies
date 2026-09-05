@@ -14,11 +14,40 @@ let view = null;
 
 /* ---------- state ---------- */
 
+// Trailing debounce, but with a ceiling. A debounce that resets on every
+// keystroke never fires while you are typing, so the file could trail the
+// screen by as long as the burst lasted -- and anything that then read the
+// file got text seconds out of date. VS Code's autosave delay is 1s; this
+// keeps the quick 250ms settle and caps the wait at 1s.
+const SAVE_SETTLE_MS = 250;
+const SAVE_MAX_MS = 1000;
+
 let saveTimer = null;
-function scheduleSave() {
+let pendingSince = 0;
+
+function saveNow() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => window.sticky.update({ body: note.body }), 250);
+  saveTimer = null;
+  pendingSince = 0;
+  if (note) window.sticky.update({ body: note.body });
 }
+
+function scheduleSave() {
+  if (!pendingSince) pendingSince = Date.now();
+  if (Date.now() - pendingSince >= SAVE_MAX_MS) {
+    saveNow();
+    return;
+  }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, SAVE_SETTLE_MS);
+}
+
+// Losing focus is the moment to be certain: the file is what another editor,
+// or a sync engine, is about to read. VS Code ships the same behaviour as
+// files.autoSave onFocusChange.
+window.addEventListener('blur', () => {
+  if (saveTimer) saveNow();
+});
 
 // Typing is saved on a debounce, which Cmd+W would otherwise outrun: the window
 // is closed from the main process, so the pending timer dies with the renderer
@@ -114,15 +143,72 @@ window.sticky.on('describe-latex', async () => {
 // The file changed underneath us -- another editor, Dropbox, a git checkout.
 // Replace the text but keep the caret where it was, so a sync landing while
 // you are typing does not throw you back to the top of the note.
-window.sticky.on('note-changed', (body) => {
-  if (!view || body === view.state.doc.toString()) return;
-  const caret = Math.min(view.state.selection.main.head, body.length);
+/**
+ * Applies an edit that happened outside this window.
+ *
+ * As a splice of the part that actually differs, not a replacement of the
+ * whole document. Replacing everything maps every position to the end of the
+ * insertion, so the caret jumps, the selection is lost and the undo history
+ * becomes one opaque blob -- CodeMirror maps positions through a change set
+ * for you, but only if the change describes what really changed.
+ *
+ * Common prefix and suffix is enough here: an outside edit is nearly always
+ * one contiguous region, and it costs no dependency.
+ */
+function applyExternal(body) {
+  const doc = view.state.doc.toString();
+  if (body === doc) return;
+
+  let start = 0;
+  const max = Math.min(doc.length, body.length);
+  while (start < max && doc[start] === body[start]) start += 1;
+
+  let end = 0;
+  while (
+    end < max - start
+    && doc[doc.length - 1 - end] === body[body.length - 1 - end]
+  ) end += 1;
+
   note.body = body;
   view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: body },
-    selection: { anchor: caret },
+    changes: { from: start, to: doc.length - end, insert: body.slice(start, body.length - end) },
   });
+}
+
+window.sticky.on('note-changed', (body) => {
+  if (!view) return;
+  applyExternal(body);
 });
+
+/**
+ * The file changed while this note had edits that were not saved yet.
+ *
+ * Nothing is overwritten: the two versions are offered as a choice, because
+ * only the person typing knows which one they want. Silently reloading over
+ * unsaved input is the one thing every editor of this kind refuses to do.
+ */
+window.sticky.on('note-conflict', (body) => {
+  if (!view) return;
+  showConflict(body);
+});
+
+const conflict = document.getElementById('conflict');
+
+function showConflict(body) {
+  conflict.hidden = false;
+  conflict.querySelector('.reload').onclick = () => {
+    applyExternal(body);
+    saveNow();
+    conflict.hidden = true;
+  };
+  conflict.querySelector('.mine').onclick = () => {
+    // Writing our copy over theirs is what makes this stick: the next save
+    // carries it, and the file stops disagreeing.
+    note.body = view.state.doc.toString();
+    saveNow();
+    conflict.hidden = true;
+  };
+}
 
 // Right-click a rendered equation to copy it as an image or as LaTeX.
 host.addEventListener('contextmenu', async (e) => {

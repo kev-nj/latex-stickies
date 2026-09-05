@@ -223,6 +223,124 @@ const LEGACY = [
   fs.rmSync(base, { recursive: true, force: true });
 }
 
+/* ---------- outside edits ---------- */
+
+// The bug these cover: typing in one note, anything at all touching the
+// folder, and the note reverting to what was last written -- which was then
+// saved back over the top, so the words were actually gone.
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'A', body: '# Alpha\\nsaved text' });
+    store.upsert({ id: 'B', body: '# Beta\\nsaved text' });
+    store.saveNow();
+
+    const events = [];
+    const stop = store.watch((changes) => {
+      for (const c of changes) events.push({ id: c.note.id, conflict: c.conflict });
+    });
+
+    // Typing in A, not yet written to disk.
+    store.upsert({ id: 'A', body: '# Alpha\\nsaved text\\nwords just typed' });
+
+    // Something else writes an unrelated file in the folder.
+    fs.writeFileSync(path.join(DIR, 'from-elsewhere.md'), '# Elsewhere');
+
+    setTimeout(() => {
+      stop();
+      out({ events, aStillHasTyping: store.get('A').body.includes('words just typed') });
+    }, 500);
+  `);
+  check('an unrelated file does not touch the note being typed in',
+    !result.events.some((e) => e.id === 'A'));
+  check('unsaved words survive an unrelated event', result.aStillHasTyping === true);
+  check('the new file is picked up', result.events.some((e) => e.conflict === false));
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'A', body: 'original' });
+    store.saveNow();
+    const stop = store.watch(() => {});
+    // Our own save, echoed back long after the old 1200ms window would have
+    // closed -- which is what a stalled main process produced.
+    setTimeout(() => {
+      fs.utimesSync(path.join(DIR, store.get('A').file), new Date(), new Date());
+    }, 1400);
+    setTimeout(() => {
+      stop();
+      out({ body: store.get('A').body });
+    }, 1900);
+  `);
+  check('a late echo of our own write is still recognised as ours',
+    result.body === 'original');
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'A', body: 'mine' });
+    store.saveNow();
+    const seen = [];
+    const stop = store.watch((changes) => seen.push(...changes.map((c) => ({
+      conflict: c.conflict, body: c.body,
+    }))));
+
+    // Someone else edits the file while this note has unsaved changes. The
+    // first line is left alone deliberately: changing it renames the file,
+    // and the rename writes it, so the note would no longer be unsaved.
+    store.upsert({ id: 'A', body: 'mine\\nstill being typed' });
+    fs.writeFileSync(path.join(DIR, store.get('A').file), 'theirs');
+
+    setTimeout(() => {
+      stop();
+      out({ seen, memory: store.get('A').body });
+    }, 500);
+  `);
+  check('an outside edit during unsaved typing is reported as a conflict',
+    result.seen.length === 1 && result.seen[0].conflict === true);
+  check('a conflict offers the other version', result.seen[0].body === 'theirs');
+  check('a conflict does not overwrite what was typed',
+    result.memory === 'mine\nstill being typed');
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'A', body: 'original' });
+    store.saveNow();
+    const seen = [];
+    const stop = store.watch((changes) => seen.push(...changes.map((c) => c.conflict)));
+    // Nothing unsaved this time, so the edit can simply be taken.
+    fs.writeFileSync(path.join(DIR, store.get('A').file), 'edited in vim');
+    setTimeout(() => {
+      stop();
+      out({ seen, body: store.get('A').body });
+    }, 500);
+  `);
+  check('an outside edit to a note with nothing unsaved is applied',
+    result.seen.length === 1 && result.seen[0] === false && result.body === 'edited in vim');
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'A', body: '# Alpha' });
+    store.upsert({ id: 'B', body: '# Beta' });
+    store.saveNow();
+    const before = fs.statSync(path.join(DIR, 'beta.md')).mtimeMs;
+    setTimeout(() => {
+      store.upsert({ id: 'A', body: '# Alpha edited' });
+      store.saveNow();
+      out({ untouched: fs.statSync(path.join(DIR, 'beta.md')).mtimeMs === before });
+    }, 20);
+  `);
+  // Rewriting every note on every keystroke multiplied the events, and every
+  // extra event was another chance to misread one as an outside edit.
+  check('saving one note does not rewrite the others', result.untouched === true);
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
 /* ---------- durability ---------- */
 
 {

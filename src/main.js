@@ -493,11 +493,16 @@ function prepareToExit() {
 }
 
 function watchNotesFolder() {
-  stopWatchingNotes = store.watch((changed) => {
-    for (const note of changed) {
+  stopWatchingNotes = store.watch((changes) => {
+    for (const { note, body, conflict } of changes) {
       const win = windows.get(note.id);
-      if (win && !win.isDestroyed()) win.webContents.send('note-changed', note.body);
+      if (!win || win.isDestroyed()) continue;
+      // A note with unsaved edits is never overwritten from disk. The window
+      // is told there is a conflict and offers the choice, because only the
+      // person typing knows which copy they want.
+      win.webContents.send(conflict ? 'note-conflict' : 'note-changed', body);
     }
+    refreshNoteTitles();
   });
 }
 

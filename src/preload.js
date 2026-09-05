@@ -43,7 +43,8 @@ contextBridge.exposeInMainWorld('sticky', {
   on: (channel, fn) => {
     const allowed = [
       'font-size', 'always-on-top-changed',
-      'copy-note-image', 'ai-settings-changed', 'note-changed', 'find-in-note', 'describe-latex',
+      'copy-note-image', 'ai-settings-changed', 'note-changed', 'note-conflict',
+      'find-in-note', 'describe-latex',
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, payload) => fn(payload));

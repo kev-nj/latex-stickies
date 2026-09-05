@@ -17,6 +17,7 @@
  * the previous file intact rather than a truncated one.
  */
 const { app } = require('electron');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -98,6 +99,7 @@ function load() {
     try {
       body = fs.readFileSync(path.join(DIR, file), 'utf8');
     } catch (_) { /* unreadable file: show it empty rather than vanish */ }
+    seen.set(file, digest(body));
     return {
       ...DEFAULTS,
       ...saved,
@@ -154,7 +156,6 @@ function migrateLegacy() {
 /* ---------- writing ---------- */
 
 function writeFileAtomic(target, contents) {
-  justWrote.set(path.basename(target), Date.now());
   const tmp = `${target}.${process.pid}.tmp`;
   const fd = fs.openSync(tmp, 'w');
   try {
@@ -164,6 +165,7 @@ function writeFileAtomic(target, contents) {
     fs.closeSync(fd);
   }
   fs.renameSync(tmp, target);
+  seen.set(path.basename(target), digest(contents));
 }
 
 // A kill between the temp write and the rename strands a .tmp file.
@@ -204,6 +206,11 @@ function flushIndex() {
 function flush() {
   timer = null;
   for (const note of all()) {
+    // Only the notes that actually changed. Rewriting every note on every
+    // keystroke multiplied the mtimes, the events and the chances of
+    // misattributing one -- four notes turned one save into twenty events --
+    // and churned any sync engine watching the folder.
+    if (!isDirty(note)) continue;
     try {
       writeFileAtomic(path.join(DIR, note.file), note.body || '');
     } catch (err) {
@@ -211,6 +218,11 @@ function flush() {
     }
   }
   flushIndex();
+}
+
+/** Has this note been edited since it was last written to disk? */
+function isDirty(note) {
+  return digest(note.body || '') !== seen.get(note.file);
 }
 
 // Writes are frequent (every keystroke, every window drag), so coalesce them.
@@ -254,11 +266,8 @@ function upsert(note) {
     const next = slugFor(list[i].body, taken, path.extname(before.file) || '.md');
     try {
       const from = path.join(DIR, before.file);
-      // Both names count as our own writing, or the rename looks like an
-      // outside edit and the watcher reloads over the top of it.
-      justWrote.set(before.file, Date.now());
-      justWrote.set(next, Date.now());
       if (fs.existsSync(from)) fs.renameSync(from, path.join(DIR, next));
+      seen.delete(before.file);
       list[i].file = next;
       // Write this note's body now too. The rename is immediate but the body
       // is on the 400ms timer, so a reload in between would read the new file
@@ -296,34 +305,92 @@ function saveNow() {
 
 /* ---------- watching the folder ---------- */
 
-/** Files we wrote ourselves, so our own saves do not look like outside edits. */
-const justWrote = new Map();
-const SETTLE_MS = 1200;
+/**
+ * The content we last wrote or read, per file, as a hash.
+ *
+ * This is how an event is attributed. A file whose bytes hash to what we last
+ * put there is our own save coming back, whenever it arrives; anything else is
+ * somebody else's edit. What it replaces was a 1200ms window after each write,
+ * which is not what mature editors do and was wrong in both directions: a save
+ * echoed back late -- measured at 2.5s when the main process stalls -- looked
+ * like an outside edit and reverted the note being typed in.
+ *
+ * VS Code uses mtime+size for the same job and has an open issue about content
+ * changing without the length changing; notes are small enough to just hash.
+ */
+const seen = new Map();
+const digest = (text) => crypto.createHash('sha256').update(text || '').digest('hex');
 
 /**
  * Calls back when a note file changes underneath us.
  *
  * This is the point of keeping notes as files: edit one in Vim, or let Dropbox
  * bring down a change from another machine, and the open note follows along.
- * Our own writes are filtered out, or every keystroke would echo back.
+ *
+ * Two rules, both taken from how VS Code and Zed handle this:
+ *
+ *   - Only the file the event names is touched. Fanning one event out into a
+ *     reload of every note is what let a change to one note revert the text
+ *     being typed into another.
+ *   - A note with unsaved edits is never overwritten. It is reported as a
+ *     conflict instead, for the window to offer as a choice. "Do not resolve a
+ *     model that is dirty" is the invariant every editor of this kind keeps.
  */
 function watch(onChanged) {
-  let timer = null;
+  const timers = new Map();
   let watcher = null;
+
+  const handle = (filename) => {
+    timers.delete(filename);
+    const full = path.join(DIR, filename);
+
+    let body;
+    try {
+      body = fs.readFileSync(full, 'utf8');
+    } catch (_) {
+      // Deleted or moved away. The window keeps what it has: a file vanishing
+      // underneath an open note is not a reason to blank it.
+      seen.delete(filename);
+      return;
+    }
+
+    const before = seen.get(filename);
+    const now = digest(body);
+    if (now === before) return; // our own save, however late it arrives
+
+    const note = all().find((n) => n.file === filename);
+    if (!note) {
+      // A file that appeared from outside. Added on its own rather than by
+      // reloading the folder: a reload drops every note's unsaved edits on the
+      // floor, so one new file would cost the words being typed in another.
+      const meta = readIndex()[filename] || {};
+      const added = {
+        ...DEFAULTS, ...meta, id: meta.id || filename, file: filename, body,
+      };
+      all().push(added);
+      seen.set(filename, now);
+      onChanged([{ note: added, body, conflict: false }]);
+      return;
+    }
+
+    // Whether the note was edited since we last wrote it has to be judged
+    // against the hash from before this event, which is what our copy came
+    // from -- not against the disk we have just read.
+    const dirty = digest(note.body || '') !== before;
+    seen.set(filename, now); // seen it now, so a repeat event says nothing new
+
+    if (!dirty) note.body = body;
+    onChanged([{ note, body, conflict: dirty }]);
+  };
+
   try {
     watcher = fs.watch(DIR, (_event, filename) => {
       if (!filename || filename.startsWith('.') || filename.endsWith('.tmp')) return;
-      const wrote = justWrote.get(filename);
-      if (wrote && Date.now() - wrote < SETTLE_MS) return;
+      if (!/\.(md|tex|txt)$/i.test(filename)) return;
 
-      // Editors save in bursts; wait for the dust to settle.
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const before = new Map(all().map((n) => [n.file, n.body]));
-        const after = reload();
-        const changed = after.filter((n) => before.get(n.file) !== n.body);
-        if (changed.length) onChanged(changed);
-      }, 150);
+      // Editors save in bursts; wait for the dust to settle, per file.
+      clearTimeout(timers.get(filename));
+      timers.set(filename, setTimeout(() => handle(filename), 150));
     });
   } catch (err) {
     console.error('could not watch the notes folder', err);
@@ -333,8 +400,8 @@ function watch(onChanged) {
   // watcher left open is enough to stop the process exiting after its last
   // window closes -- which on Windows leaves the app running invisibly.
   return () => {
-    clearTimeout(timer);
-    timer = null;
+    for (const timer of timers.values()) clearTimeout(timer);
+    timers.clear();
     if (watcher) watcher.close();
     watcher = null;
   };
@@ -371,5 +438,6 @@ function saveSettings(patch) {
 }
 
 module.exports = {
-  all, get, upsert, remove, saveNow, reload, watch, settings, saveSettings, DIR,
+  all, get, upsert, remove, saveNow, reload, watch, isDirty,
+  settings, saveSettings, DIR,
 };

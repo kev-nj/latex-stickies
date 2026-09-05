@@ -21,6 +21,13 @@
   </header>
   <main id="surface">
     <div id="host"></div>
+    <!-- Shown only when the file changed underneath unsaved edits. Not a
+         modal: the note stays editable while the choice is on screen. -->
+    <div id="conflict" hidden>
+      <span>Changed on disk.</span>
+      <button class="reload" type="button">Use theirs</button>
+      <button class="mine" type="button">Keep mine</button>
+    </div>
   </main>
   <script src="vendor/katex.min.js"></script>
   <script src="vendor/codemirror.js"></script>
