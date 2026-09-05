@@ -223,6 +223,23 @@ const LEGACY = [
   fs.rmSync(base, { recursive: true, force: true });
 }
 
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'gone', body: '' });   // untitled, so it takes note.md
+    store.saveNow();
+    store.remove('gone');
+    store.saveNow();
+    store.upsert({ id: 'fresh', body: '' });  // takes the freed name back
+    store.saveNow();
+    out({ files: fs.readdirSync(DIR).filter((f) => f.endsWith('.md')) });
+  `);
+  // The deleted file's content was still remembered under that name, so the
+  // new note matched it, counted as already saved, and never reached disk.
+  check('a note reusing a deleted note\'s filename is still written',
+    result.files.length === 1 && result.files[0] === 'note.md');
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
 /* ---------- outside edits ---------- */
 
 // The bug these cover: typing in one note, anything at all touching the

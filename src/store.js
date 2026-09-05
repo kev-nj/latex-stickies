@@ -293,6 +293,11 @@ function remove(id) {
     try {
       fs.unlinkSync(path.join(DIR, note.file));
     } catch (_) { /* already gone */ }
+    // Forget what that filename held. Otherwise a later note that takes the
+    // same name -- "note.md" is handed out again the moment an untitled note
+    // is deleted -- is compared against the dead file's content, matches, and
+    // is judged already saved. It then never reaches disk.
+    seen.delete(note.file);
   }
   notes = all().filter((n) => n.id !== id);
   save();
