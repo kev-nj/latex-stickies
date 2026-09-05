@@ -356,6 +356,20 @@ function watch(onChanged) {
 
     const before = seen.get(filename);
     const now = digest(body);
+
+    // Set LATEX_STICKIES_DEBUG_WATCH=1 to see why an event was attributed the
+    // way it was. Guessing at this from the outside cost a day: the question
+    // is always whether the bytes on disk are the bytes we last wrote.
+    if (process.env.LATEX_STICKIES_DEBUG_WATCH) {
+      const held = all().find((n) => n.file === filename);
+      console.log(
+        `WATCH ${filename} disk=${now.slice(0, 8)} lastWrote=${String(before).slice(0, 8)}`
+        + ` memory=${digest(held ? held.body : '').slice(0, 8)}`
+        + ` ours=${now === before} diskLen=${body.length}`
+        + ` memLen=${held ? (held.body || '').length : -1}`
+      );
+    }
+
     if (now === before) return; // our own save, however late it arrives
 
     const note = all().find((n) => n.file === filename);

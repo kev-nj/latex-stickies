@@ -366,7 +366,9 @@ body.capturing-note #preview [data-math].capturing {
 /* The file changed underneath unsaved edits. Sits over the note rather than
    interrupting it: the text stays editable while the choice is on screen. */
 #conflict {
-  position: absolute;
+  /* Fixed to the window, not the scrolling content: the choice has to stay
+     visible while you scroll the note it is about. */
+  position: fixed;
   left: 8px;
   right: 8px;
   bottom: 8px;
@@ -380,6 +382,10 @@ body.capturing-note #preview [data-math].capturing {
   font-size: 12px;
   z-index: 5;
 }
+/* An author display rule beats the [hidden] attribute, which only sets
+   display:none in the browser's own stylesheet -- so without this the banner
+   is on screen from launch and cannot be dismissed. */
+#conflict[hidden] { display: none; }
 #conflict span { flex: 1; }
 #conflict button {
   font: inherit;

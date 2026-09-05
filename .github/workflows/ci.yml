@@ -89,6 +89,17 @@ jobs:
         if: runner.os != 'Linux'
         run: node scripts/ghost-check.js
 
+      # The conflict banner shipped broken twice in an afternoon, invisibly to
+      # every other check: a computed style is not something the unit suites
+      # can see.
+      - name: Conflict banner (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/conflict-check.js
+
+      - name: Conflict banner
+        if: runner.os != 'Linux'
+        run: node scripts/conflict-check.js
+
       # What a user actually installs, which nothing else here exercises: a
       # checkout runs from source and a built .app is branded by
       # electron-builder, so six releases in a row shipped a Dock name or icon

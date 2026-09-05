@@ -26,6 +26,7 @@ node scripts/smoke.js --lifecycle  # closing every note behaves per platform
 node scripts/render-check.js       # live preview actually rendered
 node scripts/ghost-check.js        # autocomplete suggests, Tab accepts
 node scripts/snapshot-check.js     # a long note is captured whole
+node scripts/conflict-check.js     # the changed-on-disk banner behaves
 node scripts/verify-install.js     # the npm install path, end to end
 ```
 
