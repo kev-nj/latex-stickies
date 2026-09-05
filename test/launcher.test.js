@@ -12,6 +12,15 @@ const ROOT = path.join(__dirname, '..');
 const checks = [];
 const check = (name, ok) => checks.push([name, ok]);
 
+// The stand-in runtimes here are shell scripts, and killing the survivor uses
+// pkill. Both are Unix-only, and Node refuses to spawn a .cmd without a shell
+// anyway, so a Windows version would test the harness rather than the
+// launcher. The launch path itself is covered on Windows by scripts/smoke.js.
+if (process.platform === 'win32') {
+  console.log('SKIP  launcher checks need a POSIX shell');
+  process.exit(0);
+}
+
 /**
  * Runs the launcher against a stand-in for Electron.
  *
