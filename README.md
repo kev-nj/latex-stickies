@@ -23,6 +23,11 @@ npm install -g latex-stickies
 latex-stickies
 ```
 
+If a launch fails, the launcher says so and shows the runtime's own output;
+the full log is kept at `~/Library/Logs/latex-stickies/launch.log` on macOS,
+`%LOCALAPPDATA%\latex-stickies\` on Windows, and `$XDG_STATE_HOME` (or
+`~/.local/state/latex-stickies/`) on Linux.
+
 Requires Node 22.12 or newer. The first run downloads the Electron runtime
 (~230 MB), so give it a minute; later launches are instant. On a Mac it also
 keeps a copy of the runtime carrying this app's name and icon in

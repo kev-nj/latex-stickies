@@ -63,6 +63,12 @@ function source() {
   const binary = require(path.join(dir, 'index.js'));
   // .../Electron.app/Contents/MacOS/Electron -> .../Electron.app
   const app = path.resolve(path.dirname(binary), '..', '..');
+  // Make sure that really is a bundle before anything is built from it. A
+  // stub or an odd install resolves to something that is not an .app, and the
+  // build then fails partway and takes the existing branded copy with it.
+  if (!app.endsWith('.app') || !fs.existsSync(path.join(app, 'Contents', 'MacOS'))) {
+    throw new Error(`the Electron runtime at ${app} is not an app bundle`);
+  }
   const { version } = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
   return { app, version };
 }
@@ -173,8 +179,12 @@ function ensure() {
     return binary;
   } catch (err) {
     // Leave nothing half-built: a bundle with a broken signature will not
-    // launch at all, which is far worse than the wrong name.
-    fs.rmSync(TARGET, { recursive: true, force: true });
+    // launch at all, which is far worse than the wrong name. Only what this
+    // run was building, though -- a failure part way through is no reason to
+    // remove a copy that was working before it.
+    if (!isCurrent(version)) {
+      fs.rmSync(TARGET, { recursive: true, force: true });
+    }
     report(`could not brand the app (${first(err)})`);
     return null;
   }
