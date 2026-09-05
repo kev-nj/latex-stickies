@@ -92,7 +92,7 @@ Use `Ctrl` in place of `Cmd` on Windows and Linux.
 | | |
 |---|---|
 | `Cmd+N` | New note |
-| `Cmd+W` | Close note (it stays closed until you reopen it) |
+| `Cmd+W` | Close note (it stays closed until you reopen it; an empty one is discarded) |
 | `Cmd+Shift+Backspace` | Delete note, permanently |
 | `Cmd+B` / `Cmd+I` / `Cmd+E` | Bold / italic / code |
 | `Cmd+K` | Link |

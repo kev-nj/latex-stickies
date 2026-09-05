@@ -163,7 +163,18 @@ function openNote(note) {
     // Closing a note is a decision that should survive a restart. Quitting is
     // not: an app that shuts down closes every window, and treating that as
     // "the user closed them all" would greet them with an empty desk.
-    if (!quitting) store.upsert({ id: note.id, open: false });
+    if (!quitting) {
+      const closed = store.get(note.id);
+      if (closed && !(closed.body || '').trim()) {
+        // An emptied note closed is a note thrown away, as in Stickies.
+        // Otherwise clearing a note's text leaves an "Untitled note" in the
+        // list for ever, with no way to be rid of it short of opening it
+        // again to delete it -- which is not where anyone looks.
+        store.remove(note.id);
+      } else {
+        store.upsert({ id: note.id, open: false });
+      }
+    }
 
     // macOS apps outlive their windows; the Dock icon is the way back.
     // Elsewhere there is no way back, so an app with no windows is just an
