@@ -247,6 +247,11 @@ function upsert(note) {
   const i = list.findIndex((n) => n.id === note.id);
 
   if (i === -1) {
+    // A patch for an id nobody has, carrying no text, is not a new note: it is
+    // a stray message about one that has gone -- a window closing after its
+    // note was deleted, or bounds arriving as it goes. Creating a note from it
+    // resurrects what the user just deleted, empty.
+    if (note.body === undefined) return;
     const taken = new Set(list.map((n) => n.file));
     list.push({ ...DEFAULTS, ...note, file: note.file || slugFor(note.body, taken) });
     save();

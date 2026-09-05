@@ -240,6 +240,23 @@ const LEGACY = [
   fs.rmSync(base, { recursive: true, force: true });
 }
 
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'doomed', body: '# Doomed' });
+    store.saveNow();
+    store.remove('doomed');
+    // The window closes a moment later and reports its state, as it does on
+    // every close. That must not bring the note back.
+    store.upsert({ id: 'doomed', open: false });
+    store.upsert({ id: 'doomed', bounds: { x: 1, y: 2, width: 3, height: 4 } });
+    store.saveNow();
+    out({ notes: store.all().length, files: fs.readdirSync(DIR).filter((f) => f.endsWith('.md')) });
+  `);
+  check('a deleted note is not resurrected by its window closing',
+    result.notes === 0 && result.files.length === 0);
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
 /* ---------- outside edits ---------- */
 
 // The bug these cover: typing in one note, anything at all touching the

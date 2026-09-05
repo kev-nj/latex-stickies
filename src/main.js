@@ -169,7 +169,11 @@ function openNote(note) {
     // Closing a note is a decision that should survive a restart. Quitting is
     // not: an app that shuts down closes every window, and treating that as
     // "the user closed them all" would greet them with an empty desk.
-    if (!quitting) {
+    // Nothing to record if the note is already gone: this fires during a
+    // delete too, and writing "open: false" for an id the store no longer
+    // knows created a fresh empty note in its place -- the note came straight
+    // back as "Untitled note".
+    if (!quitting && store.get(note.id)) {
       const closed = store.get(note.id);
       if (closed && !(closed.body || '').trim()) {
         // An emptied note closed is a note thrown away, as in Stickies.
