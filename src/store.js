@@ -211,6 +211,17 @@ function flush() {
     // misattributing one -- four notes turned one save into twenty events --
     // and churned any sync engine watching the folder.
     if (!isDirty(note)) continue;
+
+    // Never write over a file that moved underneath us. The watcher usually
+    // gets there first, but a save already pending can land in between --
+    // and overwriting then is silent loss, with no event left to notice it.
+    // Skipping leaves the file alone; the watcher reports the conflict, and
+    // if it somehow missed the event, the next save checks again.
+    try {
+      const onDisk = fs.readFileSync(path.join(DIR, note.file), 'utf8');
+      if (digest(onDisk) !== seen.get(note.file)) continue;
+    } catch (_) { /* not there yet: writing it is exactly right */ }
+
     try {
       writeFileAtomic(path.join(DIR, note.file), note.body || '');
     } catch (err) {

@@ -36,6 +36,21 @@ const fs = require('fs');
 const path = require('path');
 const DIR = store.DIR;
 const out = (v) => console.log('RESULT ' + JSON.stringify(v));
+/**
+ * Waits for a condition, up to a timeout.
+ *
+ * Filesystem events do not arrive on a schedule -- a fixed sleep passed here
+ * for weeks and then failed on a loaded CI runner, which is the wrong way to
+ * find out. Polling is honest about what is actually being waited for.
+ */
+const until = (test, ms = 8000) => new Promise((resolve) => {
+  const deadline = Date.now() + ms;
+  const tick = () => {
+    if (test() || Date.now() > deadline) return resolve(test());
+    setTimeout(tick, 25);
+  };
+  tick();
+});
 ${body}
 `);
   const stdout = execFileSync(process.execPath, [script], { stdio: 'pipe' }).toString();
@@ -276,13 +291,18 @@ const LEGACY = [
     // Typing in A, not yet written to disk.
     store.upsert({ id: 'A', body: '# Alpha\\nsaved text\\nwords just typed' });
 
-    // Something else writes an unrelated file in the folder.
-    fs.writeFileSync(path.join(DIR, 'from-elsewhere.md'), '# Elsewhere');
-
+    // Something else writes an unrelated file in the folder. After a beat, so
+    // the event for our own save above is dealt with first and the two are
+    // not racing to be the event this test is looking at.
     setTimeout(() => {
+      fs.writeFileSync(path.join(DIR, 'from-elsewhere.md'), '# Elsewhere');
+    }, 250);
+
+    // Wait for the new file to be noticed, then look at what else happened.
+    until(() => events.length > 0).then(() => setTimeout(() => {
       stop();
       out({ events, aStillHasTyping: store.get('A').body.includes('words just typed') });
-    }, 500);
+    }, 250));
   `);
   check('an unrelated file does not touch the note being typed in',
     !result.events.some((e) => e.id === 'A'));
@@ -304,7 +324,7 @@ const LEGACY = [
     setTimeout(() => {
       stop();
       out({ body: store.get('A').body });
-    }, 1900);
+    }, 2500);
   `);
   check('a late echo of our own write is still recognised as ours',
     result.body === 'original');
@@ -324,12 +344,14 @@ const LEGACY = [
     // first line is left alone deliberately: changing it renames the file,
     // and the rename writes it, so the note would no longer be unsaved.
     store.upsert({ id: 'A', body: 'mine\\nstill being typed' });
-    fs.writeFileSync(path.join(DIR, store.get('A').file), 'theirs');
-
     setTimeout(() => {
+      fs.writeFileSync(path.join(DIR, store.get('A').file), 'theirs');
+    }, 250);
+
+    until(() => seen.length > 0).then(() => setTimeout(() => {
       stop();
       out({ seen, memory: store.get('A').body });
-    }, 500);
+    }, 250));
   `);
   check('an outside edit during unsaved typing is reported as a conflict',
     result.seen.length === 1 && result.seen[0].conflict === true);
@@ -346,11 +368,13 @@ const LEGACY = [
     const seen = [];
     const stop = store.watch((changes) => seen.push(...changes.map((c) => c.conflict)));
     // Nothing unsaved this time, so the edit can simply be taken.
-    fs.writeFileSync(path.join(DIR, store.get('A').file), 'edited in vim');
     setTimeout(() => {
+      fs.writeFileSync(path.join(DIR, store.get('A').file), 'edited in vim');
+    }, 250);
+    until(() => seen.length > 0).then(() => setTimeout(() => {
       stop();
       out({ seen, body: store.get('A').body });
-    }, 500);
+    }, 250));
   `);
   check('an outside edit to a note with nothing unsaved is applied',
     result.seen.length === 1 && result.seen[0] === false && result.body === 'edited in vim');
@@ -372,6 +396,24 @@ const LEGACY = [
   // Rewriting every note on every keystroke multiplied the events, and every
   // extra event was another chance to misread one as an outside edit.
   check('saving one note does not rewrite the others', result.untouched === true);
+  fs.rmSync(base, { recursive: true, force: true });
+}
+
+{
+  const { result, base } = inStore(`
+    store.upsert({ id: 'A', body: 'ours' });
+    store.saveNow();
+    // A save is pending when somebody else writes the file.
+    store.upsert({ id: 'A', body: 'ours, edited' });
+    fs.writeFileSync(path.join(DIR, store.get('A').file), 'theirs');
+    setTimeout(() => {
+      store.saveNow();
+      out({ onDisk: fs.readFileSync(path.join(DIR, store.get('A').file), 'utf8') });
+    }, 50);
+  `);
+  // Overwriting here would be silent: the event we would have noticed it by
+  // is the one our own write consumed.
+  check('a pending save does not overwrite an outside edit', result.onDisk === 'theirs');
   fs.rmSync(base, { recursive: true, force: true });
 }
 
