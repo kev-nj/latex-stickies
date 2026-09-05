@@ -68,7 +68,13 @@ async function deleteFocusedNote() {
 
   const note = store.get(id);
   if (note && note.body.trim()) {
-    const { response } = await dialog.showMessageBox(win, {
+    // Deliberately not attached to the note's window. A sheet hangs off a
+    // title bar, and these windows are frameless, transparent and often on
+    // top -- so the prompt rendered invisibly and the app sat waiting for an
+    // answer nobody could give. Delete Note looked like it did nothing at all.
+    // The same trap took window.confirm() out of use here.
+    win.show();
+    const { response } = await dialog.showMessageBox({
       type: 'warning',
       buttons: ['Delete', 'Cancel'],
       defaultId: 1,
