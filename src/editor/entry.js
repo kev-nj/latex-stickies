@@ -20,7 +20,9 @@ import {
   defaultKeymap, history, historyKeymap, indentWithTab,
   cursorLineUp, cursorLineDown, selectLineUp, selectLineDown,
 } from '@codemirror/commands';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import {
+  markdown, markdownLanguage, insertNewlineContinueMarkup,
+} from '@codemirror/lang-markdown';
 import {
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle,
   LanguageDescription,
@@ -70,7 +72,7 @@ window.CM = {
   EditorView, keymap, Decoration, WidgetType, ViewPlugin,
   defaultKeymap, history, historyKeymap, indentWithTab,
   cursorLineUp, cursorLineDown, selectLineUp, selectLineDown,
-  markdown, markdownLanguage,
+  markdown, markdownLanguage, insertNewlineContinueMarkup,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle,
   tags, codeLanguages,
   search, searchKeymap, highlightSelectionMatches, openSearchPanel,

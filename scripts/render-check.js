@@ -156,11 +156,38 @@ app.whenReady().then(async () => {
       const undo = window.CM.historyKeymap.find((b) => b.key === 'Mod-z').run;
       undo(view);
       const undone = view.state.doc.length === end;
+      const original = view.state.doc.toString();
+      // Enter has to carry a list on, or a bare line after a task invites
+      // "[ ] thing", which looks like a task and is not one. A second Enter on
+      // an item with nothing in it should end the list rather than extend it.
+      const listed = [];
+      for (const [start, typed] of [['- [ ] milk', 'eggs'], ['- one', 'two'],
+                                    ['1. one', 'two'], ['> quoted', 'more']]) {
+        const at = view.state.doc.length;
+        view.dispatch({
+          changes: { from: at, insert: '\\\\n' + start },
+          selection: { anchor: at + start.length + 1 },
+        });
+        press('Enter');
+        await pause();
+        view.dispatch({ changes: { from: view.state.selection.main.head, insert: typed },
+          selection: { anchor: view.state.selection.main.head + typed.length } });
+        listed.push(view.state.doc.lineAt(view.state.selection.main.head).text);
+        press('Enter');
+        await pause();
+        press('Enter');
+        await pause();
+        listed.push(view.state.doc.lineAt(view.state.selection.main.head).text);
+      }
+
+      // Put the note back: the checks after this one count what is on screen.
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: original } });
+
       // Let the markers of the last line the caret touched finish closing,
       // or the checks that follow measure one mid-transition.
       view.dispatch({ selection: { anchor: 0 } });
       await new Promise((r) => setTimeout(r, 300));
-      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, typedOk: typed.endsWith('## New'), undone });
+      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, listed, typedOk: typed.endsWith('## New'), undone });
       } catch (e) { return JSON.stringify({ error: String(e) }); } })()
   \`).catch((e) => JSON.stringify({ error: e.message }));
   console.log('PROBE_KEYS ' + keys);
@@ -243,6 +270,10 @@ child.on('exit', () => {
         && k.walk.every((n, idx) => idx === 0 || n === k.walk[idx - 1] || n === k.walk[idx - 1] - 1)],
     ['arrowing down does the same',
       Array.isArray(k.walkDown) && k.walkDown.join() === '23,24,25,26,27'],
+    // A quote is the exception, and CodeMirror's own: an empty "> " carries
+    // on rather than ending, so it is recorded here rather than asserted away.
+    ['Enter carries a list on, and an empty item ends it',
+      (k.listed || []).join('|') === '- [ ] eggs||- two||2. two||> more|> '],
     ['shift-arrow extends a line at a time too',
       Array.isArray(k.walkShift) && k.walkShift.join() === '26,25,24,23,22' && k.extended],
     ['undo after typing a heading marker steps back over it', k.typedOk && k.undone],

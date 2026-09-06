@@ -19,7 +19,7 @@ const {
   WidgetType, ViewPlugin, keymap, Prec,
   defaultKeymap, history, historyKeymap, indentWithTab,
   cursorLineUp, cursorLineDown, selectLineUp, selectLineDown,
-  markdown, markdownLanguage, codeLanguages,
+  markdown, markdownLanguage, codeLanguages, insertNewlineContinueMarkup,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle, tags,
   search, searchKeymap, highlightSelectionMatches,
 } = window.CM;
@@ -777,6 +777,17 @@ function verticalStep(forward, base, extend) {
   };
 }
 
+/**
+ * Enter carries a list on: a new bullet, the next number, another empty task
+ * box, or a second quote line -- and a second Enter on an item with nothing in
+ * it ends the list instead of adding to it.
+ *
+ * Without this, pressing Enter after "- [ ] milk" left a bare line, and typing
+ * "[ ] eggs" there looks like a task and is not one: the box only means
+ * anything inside a list item.
+ */
+const continueList = [{ key: 'Enter', run: insertNewlineContinueMarkup }];
+
 const verticalKeymap = [
   { key: 'ArrowUp', run: verticalStep(false, cursorLineUp), preventDefault: true },
   { key: 'ArrowDown', run: verticalStep(true, cursorLineDown), preventDefault: true },
@@ -804,6 +815,7 @@ function createLiveEditor({ parent, doc, onChange }) {
         // Ahead of the defaults, so Mod-i and friends are not swallowed.
         Prec.high(keymap.of(shortcuts)),
         Prec.high(keymap.of(verticalKeymap)),
+        Prec.high(keymap.of(continueList)),
         // Search ahead of the defaults: Cmd+F must open the panel rather than
         // fall through to anything else bound to it.
         Prec.high(keymap.of(searchKeymap)),
