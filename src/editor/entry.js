@@ -10,12 +10,15 @@
  * @codemirror/language-data, which loads grammars with dynamic import -- that
  * would leave the bundle with chunks it cannot fetch over file://.
  */
-import { EditorState, StateField, StateEffect, RangeSetBuilder, Prec } from '@codemirror/state';
+import {
+  EditorState, EditorSelection, StateField, StateEffect, RangeSetBuilder, Prec,
+} from '@codemirror/state';
 import {
   EditorView, keymap, Decoration, WidgetType, ViewPlugin,
 } from '@codemirror/view';
 import {
   defaultKeymap, history, historyKeymap, indentWithTab,
+  cursorLineUp, cursorLineDown,
 } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import {
@@ -63,9 +66,10 @@ const codeLanguages = [
 ];
 
 window.CM = {
-  EditorState, StateField, StateEffect, RangeSetBuilder, Prec,
+  EditorState, EditorSelection, StateField, StateEffect, RangeSetBuilder, Prec,
   EditorView, keymap, Decoration, WidgetType, ViewPlugin,
   defaultKeymap, history, historyKeymap, indentWithTab,
+  cursorLineUp, cursorLineDown,
   markdown, markdownLanguage,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle,
   tags, codeLanguages,

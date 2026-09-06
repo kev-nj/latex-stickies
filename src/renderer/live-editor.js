@@ -15,9 +15,9 @@
  */
 
 const {
-  EditorState, StateField, StateEffect, EditorView, Decoration, WidgetType, ViewPlugin,
-  keymap, Prec,
-  defaultKeymap, history, historyKeymap, indentWithTab,
+  EditorState, EditorSelection, StateField, StateEffect, EditorView, Decoration,
+  WidgetType, ViewPlugin, keymap, Prec,
+  defaultKeymap, history, historyKeymap, indentWithTab, cursorLineUp, cursorLineDown,
   markdown, markdownLanguage, codeLanguages,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle, tags,
   search, searchKeymap, highlightSelectionMatches,
@@ -709,6 +709,72 @@ function wrapCommand(key) {
   };
 }
 
+/**
+ * ArrowUp and ArrowDown that cannot skip a line.
+ *
+ * CodeMirror moves the caret by screen geometry, and its measurements assume
+ * one text height for the whole document -- a single number, measured once
+ * from one short line. This note is not like that: code is smaller than the
+ * prose, headings are bigger. When a probe lands in a line's padding rather
+ * than on its glyphs, `posAtCoords` does not clamp into that line, it moves to
+ * the top of the block and tries again, so one press could clear a whole code
+ * block, the heading above it and the table above that.
+ *
+ * Only vertical motion hits this: it is the one caller that passes a scan
+ * direction. The public posAtCoords, used below to find the column, does not.
+ *
+ * So the built-in command still decides *whether* to move -- it knows about
+ * wrapped lines, which this must not break -- and this only pulls the caret
+ * back when it has flown past a line it could have landed on.
+ */
+function verticalStep(forward, base) {
+  return (view) => {
+    const { doc } = view.state;
+    const start = view.state.selection.main;
+    const startLine = doc.lineAt(start.head);
+    if (!base(view)) return false;
+
+    const landed = view.state.selection.main;
+    const landedNumber = doc.lineAt(landed.head).number;
+    const moved = forward ? landedNumber - startLine.number : startLine.number - landedNumber;
+    // 0 is a step within a wrapped line, 1 is the next line: both are right.
+    if (moved <= 1) return true;
+
+    const next = doc.line(forward ? startLine.number + 1 : startLine.number - 1);
+
+    // A widget standing in for whole lines has nowhere to put a caret, so
+    // flying over a table is the correct answer, not a bug to undo.
+    const block = view.lineBlockAt(next.from);
+    if (block.from !== next.from || block.to !== next.to) return true;
+
+    // Coming up, the caret belongs on the line's last wrapped row.
+    const edge = forward ? next.from : next.to;
+    const goal = landed.goalColumn ?? start.goalColumn;
+    let pos = null;
+    if (goal != null) {
+      const coords = view.coordsAtPos(edge);
+      if (coords) {
+        const left = view.contentDOM.getBoundingClientRect().left;
+        pos = view.posAtCoords({ x: left + goal, y: (coords.top + coords.bottom) / 2 }, false);
+      }
+    }
+    if (pos == null || doc.lineAt(pos).number !== next.number) {
+      pos = Math.min(next.to, next.from + (start.head - startLine.from));
+    }
+
+    view.dispatch({
+      selection: EditorSelection.cursor(pos, undefined, undefined, goal ?? undefined),
+      scrollIntoView: true,
+    });
+    return true;
+  };
+}
+
+const verticalKeymap = [
+  { key: 'ArrowUp', run: verticalStep(false, cursorLineUp), preventDefault: true },
+  { key: 'ArrowDown', run: verticalStep(true, cursorLineDown), preventDefault: true },
+];
+
 const shortcuts = [
   { key: 'Mod-b', run: wrapCommand('b') },
   { key: 'Mod-i', run: wrapCommand('i') },
@@ -728,6 +794,7 @@ function createLiveEditor({ parent, doc, onChange }) {
         history(),
         // Ahead of the defaults, so Mod-i and friends are not swallowed.
         Prec.high(keymap.of(shortcuts)),
+        Prec.high(keymap.of(verticalKeymap)),
         // Search ahead of the defaults: Cmd+F must open the panel rather than
         // fall through to anything else bound to it.
         Prec.high(keymap.of(searchKeymap)),

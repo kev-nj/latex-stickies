@@ -118,19 +118,26 @@ app.whenReady().then(async () => {
       // Double-escaped on purpose: this source passes through two template
       // literals, and a single backslash-n arrives as a real newline that
       // breaks the string literal it sits in.
-      // Walking up from the last line must visit every line on the way,
-      // including the heading. A marker with no height leaves the line
-      // unhittable and vertical motion steps straight over it.
-      const up = window.CM.defaultKeymap.find((b) => b.key === 'ArrowUp').run;
+      // Walking the caret must visit every line on the way. Real key events,
+      // not the command: the fix is a keymap entry ahead of the default one,
+      // and calling the built-in command directly would step around it.
+      const press = (key) => view.contentDOM.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      const pause = () => new Promise((r) => setTimeout(r, 60));
       view.focus();
-      view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true });
-      await new Promise((r) => setTimeout(r, 300));
-      const walk = [];
-      for (let i = 0; i < 8; i++) {
-        up(view);
-        await new Promise((r) => setTimeout(r, 60));
-        walk.push(view.state.doc.lineAt(view.state.selection.main.head).number);
-      }
+      const walkFrom = async (anchor, key, steps) => {
+        view.dispatch({ selection: { anchor }, scrollIntoView: true });
+        await new Promise((r) => setTimeout(r, 250));
+        const seen = [];
+        for (let i = 0; i < steps; i++) {
+          press(key);
+          await pause();
+          seen.push(view.state.doc.lineAt(view.state.selection.main.head).number);
+        }
+        return seen;
+      };
+      const walk = await walkFrom(view.state.doc.length, 'ArrowUp', 12);
+      const walkDown = await walkFrom(view.state.doc.line(22).from, 'ArrowDown', 5);
 
       const end = view.state.doc.length;
       view.dispatch({ changes: { from: end, insert: '\\\\n## New' }, selection: { anchor: end + 7 } });
@@ -138,7 +145,11 @@ app.whenReady().then(async () => {
       const undo = window.CM.historyKeymap.find((b) => b.key === 'Mod-z').run;
       undo(view);
       const undone = view.state.doc.length === end;
-      return JSON.stringify({ copied, walk, typedOk: typed.endsWith('## New'), undone });
+      // Let the markers of the last line the caret touched finish closing,
+      // or the checks that follow measure one mid-transition.
+      view.dispatch({ selection: { anchor: 0 } });
+      await new Promise((r) => setTimeout(r, 300));
+      return JSON.stringify({ copied, walk, walkDown, typedOk: typed.endsWith('## New'), undone });
       } catch (e) { return JSON.stringify({ error: String(e) }); } })()
   \`).catch((e) => JSON.stringify({ error: e.message }));
   console.log('PROBE_KEYS ' + keys);
@@ -198,7 +209,7 @@ child.on('exit', () => {
   const interactLine = out.split('\n').find((l) => l.startsWith('PROBE_INTERACT '));
   const i = interactLine ? JSON.parse(interactLine.slice(15)) : {};
   const keysLine = out.split('\n').find((l) => l.startsWith('PROBE_KEYS '));
-  const k = keysLine ? JSON.parse(keysLine.slice(11)) : {};
+  const k = keysLine ? JSON.parse(keysLine.slice(11)) : {}; if (process.env.DBG) console.error(keysLine);
   const checks = [
     ['editor mounted', r.editor],
     ['maths rendered by KaTeX', r.math >= 2],
@@ -216,9 +227,11 @@ child.on('exit', () => {
     ['copying a heading takes the text, not its markers', k.copied === 'Welcome to LaTeX Stickies'],
     // A repeat is a wrapped line, which is fine; a gap is a line the caret
     // could not land on.
-    ['arrowing up visits every line, heading included',
-      Array.isArray(k.walk) && k.walk.includes(27)
+    ['arrowing up visits every line, code block included',
+      Array.isArray(k.walk) && k.walk.includes(24)
         && k.walk.every((n, idx) => idx === 0 || n === k.walk[idx - 1] || n === k.walk[idx - 1] - 1)],
+    ['arrowing down does the same',
+      Array.isArray(k.walkDown) && k.walkDown.join() === '23,24,25,26,27'],
     ['undo after typing a heading marker steps back over it', k.typedOk && k.undone],
     // CodeMirror's base theme sets monospace on everything; prose must escape it.
     ['prose is not monospace', !/mono/i.test(r.proseFont || '')],
