@@ -17,7 +17,8 @@
 const {
   EditorState, EditorSelection, StateField, StateEffect, EditorView, Decoration,
   WidgetType, ViewPlugin, keymap, Prec,
-  defaultKeymap, history, historyKeymap, indentWithTab, cursorLineUp, cursorLineDown,
+  defaultKeymap, history, historyKeymap, indentWithTab,
+  cursorLineUp, cursorLineDown, selectLineUp, selectLineDown,
   markdown, markdownLanguage, codeLanguages,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle, tags,
   search, searchKeymap, highlightSelectionMatches,
@@ -726,8 +727,12 @@ function wrapCommand(key) {
  * So the built-in command still decides *whether* to move -- it knows about
  * wrapped lines, which this must not break -- and this only pulls the caret
  * back when it has flown past a line it could have landed on.
+ *
+ * Extending a selection goes through the same geometry, so it gets the same
+ * treatment: only the head moves, the anchor is left where the selection
+ * started.
  */
-function verticalStep(forward, base) {
+function verticalStep(forward, base, extend) {
   return (view) => {
     const { doc } = view.state;
     const start = view.state.selection.main;
@@ -763,7 +768,9 @@ function verticalStep(forward, base) {
     }
 
     view.dispatch({
-      selection: EditorSelection.cursor(pos, undefined, undefined, goal ?? undefined),
+      selection: extend
+        ? EditorSelection.range(start.anchor, pos, goal ?? undefined)
+        : EditorSelection.cursor(pos, undefined, undefined, goal ?? undefined),
       scrollIntoView: true,
     });
     return true;
@@ -773,6 +780,8 @@ function verticalStep(forward, base) {
 const verticalKeymap = [
   { key: 'ArrowUp', run: verticalStep(false, cursorLineUp), preventDefault: true },
   { key: 'ArrowDown', run: verticalStep(true, cursorLineDown), preventDefault: true },
+  { key: 'Shift-ArrowUp', run: verticalStep(false, selectLineUp, true), preventDefault: true },
+  { key: 'Shift-ArrowDown', run: verticalStep(true, selectLineDown, true), preventDefault: true },
 ];
 
 const shortcuts = [

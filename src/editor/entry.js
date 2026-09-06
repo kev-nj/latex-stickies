@@ -18,7 +18,7 @@ import {
 } from '@codemirror/view';
 import {
   defaultKeymap, history, historyKeymap, indentWithTab,
-  cursorLineUp, cursorLineDown,
+  cursorLineUp, cursorLineDown, selectLineUp, selectLineDown,
 } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import {
@@ -69,7 +69,7 @@ window.CM = {
   EditorState, EditorSelection, StateField, StateEffect, RangeSetBuilder, Prec,
   EditorView, keymap, Decoration, WidgetType, ViewPlugin,
   defaultKeymap, history, historyKeymap, indentWithTab,
-  cursorLineUp, cursorLineDown,
+  cursorLineUp, cursorLineDown, selectLineUp, selectLineDown,
   markdown, markdownLanguage,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle,
   tags, codeLanguages,

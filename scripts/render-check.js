@@ -121,16 +121,16 @@ app.whenReady().then(async () => {
       // Walking the caret must visit every line on the way. Real key events,
       // not the command: the fix is a keymap entry ahead of the default one,
       // and calling the built-in command directly would step around it.
-      const press = (key) => view.contentDOM.dispatchEvent(
-        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      const press = (key, mods) => view.contentDOM.dispatchEvent(new KeyboardEvent('keydown',
+        Object.assign({ key, bubbles: true, cancelable: true }, mods)));
       const pause = () => new Promise((r) => setTimeout(r, 60));
       view.focus();
-      const walkFrom = async (anchor, key, steps) => {
+      const walkFrom = async (anchor, key, steps, mods) => {
         view.dispatch({ selection: { anchor }, scrollIntoView: true });
         await new Promise((r) => setTimeout(r, 250));
         const seen = [];
         for (let i = 0; i < steps; i++) {
-          press(key);
+          press(key, mods);
           await pause();
           seen.push(view.state.doc.lineAt(view.state.selection.main.head).number);
         }
@@ -138,6 +138,10 @@ app.whenReady().then(async () => {
       };
       const walk = await walkFrom(view.state.doc.length, 'ArrowUp', 12);
       const walkDown = await walkFrom(view.state.doc.line(22).from, 'ArrowDown', 5);
+      // Extending a selection goes through the same geometry as moving.
+      const walkShift = await walkFrom(view.state.doc.line(27).from, 'ArrowUp', 5, { shiftKey: true });
+      const selected = view.state.selection.main;
+      const extended = selected.anchor === view.state.doc.line(27).from && !selected.empty;
 
       const end = view.state.doc.length;
       view.dispatch({ changes: { from: end, insert: '\\\\n## New' }, selection: { anchor: end + 7 } });
@@ -149,7 +153,7 @@ app.whenReady().then(async () => {
       // or the checks that follow measure one mid-transition.
       view.dispatch({ selection: { anchor: 0 } });
       await new Promise((r) => setTimeout(r, 300));
-      return JSON.stringify({ copied, walk, walkDown, typedOk: typed.endsWith('## New'), undone });
+      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, typedOk: typed.endsWith('## New'), undone });
       } catch (e) { return JSON.stringify({ error: String(e) }); } })()
   \`).catch((e) => JSON.stringify({ error: e.message }));
   console.log('PROBE_KEYS ' + keys);
@@ -232,6 +236,8 @@ child.on('exit', () => {
         && k.walk.every((n, idx) => idx === 0 || n === k.walk[idx - 1] || n === k.walk[idx - 1] - 1)],
     ['arrowing down does the same',
       Array.isArray(k.walkDown) && k.walkDown.join() === '23,24,25,26,27'],
+    ['shift-arrow extends a line at a time too',
+      Array.isArray(k.walkShift) && k.walkShift.join() === '26,25,24,23,22' && k.extended],
     ['undo after typing a heading marker steps back over it', k.typedOk && k.undone],
     // CodeMirror's base theme sets monospace on everything; prose must escape it.
     ['prose is not monospace', !/mono/i.test(r.proseFont || '')],
