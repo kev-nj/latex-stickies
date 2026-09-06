@@ -186,6 +186,38 @@ app.whenReady().then(async () => {
         }
       }
 
+      // A quote's own bar sat flush against its text, and every nesting level
+      // was drawn identically. Both are geometry, so both are measured.
+      const quotes = [];
+      {
+        const at = view.state.doc.length;
+        view.dispatch({
+          changes: { from: at, insert: String.fromCharCode(10) + '> One'
+            + String.fromCharCode(10) + '>> Two' + String.fromCharCode(10) + '>>> Three' },
+          selection: { anchor: at + 1 },
+        });
+        await new Promise((r) => setTimeout(r, 300));
+        for (const n of [view.state.doc.lines - 2, view.state.doc.lines - 1, view.state.doc.lines]) {
+          const dom = view.domAtPos(view.state.doc.line(n).from).node;
+          const el = (dom.nodeType === 1 ? dom : dom.parentElement).closest('.cm-line');
+          quotes.push({
+            quote: el.classList.contains('cm-md-quote'),
+            pad: parseFloat(getComputedStyle(el).paddingLeft),
+            bar: parseFloat(getComputedStyle(el, '::before').width),
+          });
+        }
+        // Walk back up through them: a padded block is where vertical motion
+        // has gone wrong before.
+        const bottom = view.state.doc.line(view.state.doc.lines);
+        view.dispatch({ selection: { anchor: bottom.from + 2 }, scrollIntoView: true });
+        await new Promise((r) => setTimeout(r, 300));
+        for (let i = 0; i < 2; i++) {
+          press('ArrowUp');
+          await pause();
+          quotes.push({ line: view.state.doc.lineAt(view.state.selection.main.head).number });
+        }
+      }
+
       // Enter has to carry a list on, or a bare line after a task invites
       // "[ ] thing", which looks like a task and is not one. A second Enter on
       // an item with nothing in it should end the list rather than extend it.
@@ -216,7 +248,8 @@ app.whenReady().then(async () => {
       // or the checks that follow measure one mid-transition.
       view.dispatch({ selection: { anchor: 0 } });
       await new Promise((r) => setTimeout(r, 300));
-      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, listed, typing, typedOk: typed.endsWith('## New'), undone });
+      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, listed, typing, quotes,
+        typedOk: typed.endsWith('## New'), undone });
       } catch (e) { return JSON.stringify({ error: String(e) }); } })()
   \`).catch((e) => JSON.stringify({ error: e.message }));
   console.log('PROBE_KEYS ' + keys);
@@ -306,6 +339,15 @@ child.on('exit', () => {
       Array.isArray(k.walkDown) && k.walkDown.join() === '23,24,25,26,27'],
     // A quote is the exception, and CodeMirror's own: an empty "> " carries
     // on rather than ending, so it is recorded here rather than asserted away.
+    ['quoted text is inset from its bar',
+      Array.isArray(k.quotes) && k.quotes[0].quote && k.quotes[0].pad > 0],
+    ['each nesting level indents further and draws its own bar',
+      Array.isArray(k.quotes)
+        && k.quotes[1].pad > k.quotes[0].pad && k.quotes[2].pad > k.quotes[1].pad
+        && k.quotes[1].bar > k.quotes[0].bar && k.quotes[2].bar > k.quotes[1].bar],
+    ['the caret still steps through a nested quote',
+      Array.isArray(k.quotes) && k.quotes[3] && k.quotes[4]
+        && k.quotes[3].line === k.quotes[4].line + 1],
     ['a heading shows its hashes while it is being typed',
       Array.isArray(k.typing) && k.typing.length === 3 && k.typing.every(Boolean)],
     ['Enter carries a list on, and an empty item ends it',

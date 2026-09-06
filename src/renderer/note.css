@@ -154,10 +154,35 @@ body.editing #tools > * { visibility: visible; }
 .cm-md-h3 { font-size: 1.05em; font-weight: 600; }
 .cm-md-h4, .cm-md-h5, .cm-md-h6 { font-weight: 600; }
 
-.cm-md-quote {
-  border-left: 2px solid rgba(0, 0, 0, 0.22);
-  padding-left: 0.7em;
+/* Scoped to .cm-editor because `.cm-editor .cm-line { padding: 0 }` above
+   zeroes it, and a bare .cm-md-quote loses to that -- which is why quoted
+   text sat hard against its own bar with no inset at all. The padding also
+   gives a wrapped quote its hanging indent, for nothing. */
+.cm-editor .cm-md-quote {
+  --quote-depth: 1;
+  position: relative;
+  padding-left: calc(var(--quote-depth) * 0.9em + 0.4em);
   opacity: 0.85;
+}
+.cm-editor .cm-md-quote-2 { --quote-depth: 2; }
+.cm-editor .cm-md-quote-3 { --quote-depth: 3; }
+
+/* One bar per nesting level, drawn as a repeating gradient rather than a
+   border: a line has only one border-left however deep the quote is. The
+   gradient repeats on the same interval as the indent, so it draws exactly
+   as many bars as there are levels. */
+.cm-editor .cm-md-quote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--quote-depth) * 0.9em);
+  background: repeating-linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.22) 0 2px,
+    transparent 2px 0.9em
+  );
 }
 
 /* Smaller text, but the same line box as prose. CodeMirror moves the caret

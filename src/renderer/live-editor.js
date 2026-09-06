@@ -447,6 +447,23 @@ function buildDecorations(state) {
         const first = state.doc.lineAt(node.from).number;
         const last = state.doc.lineAt(node.to).number;
         for (let n = first; n <= last; n++) addLine(state.doc.line(n).from, cls);
+
+        // A quote inside a quote is a quote inside a quote, and drawing every
+        // level the same made ">" and ">>" identical on screen. The outer
+        // node is entered first, so the deeper class lands only on the lines
+        // that are actually deeper. Capped because past three the indent eats
+        // the width of a sticky note.
+        if (node.name === 'Blockquote') {
+          let depth = 0;
+          for (let up = node.node; up; up = up.parent) {
+            if (up.name === 'Blockquote') depth += 1;
+          }
+          if (depth > 1) {
+            const level = `cm-md-quote-${Math.min(depth, 3)}`;
+            for (let n = first; n <= last; n++) addLine(state.doc.line(n).from, level);
+          }
+        }
+
         if (node.name === 'FencedCode') {
           addLine(state.doc.line(first).from, 'cm-md-code-first');
           addLine(state.doc.line(last).from, 'cm-md-code-last');
