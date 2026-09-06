@@ -196,6 +196,40 @@ body.editing #tools > * { visibility: visible; }
   padding-bottom: 5px;
 }
 
+/* Syntax markers -- "## ", "**", the backticks -- are hidden by width, not
+   removed, so the caret still lands on them and they can slide back in when
+   it reaches their element.
+
+   font-size: 0 is the obvious way to do that and it breaks arrow keys. A span
+   with no font size has a rect with no *height*, so a line beginning with a
+   marker cannot be hit at any y, and moving up or down steps straight over it
+   -- the caret would skip every heading. Clipping a full-size box keeps the
+   height and takes the width, which is what the caret is measured against.
+
+   max-width rather than width because there is nothing to animate towards:
+   the open state has to be wide enough for the longest marker and let the
+   content stop it short. Only the width moves; the text beside a marker is
+   already at full size and owns the line height, so nothing CodeMirror
+   measures vertically changes mid-transition. Heading sizes deliberately snap
+   for the same reason.
+
+   The open class is put on by hand in live-editor.js, not by a decoration:
+   CodeMirror rebuilds a span whose decoration changed, and a new element has
+   no width to animate from. */
+.cm-editor .cm-md-marker {
+  display: inline-block;
+  overflow: hidden;
+  white-space: pre;
+  vertical-align: bottom;
+  max-width: 0;
+  opacity: 0;
+  transition: max-width 0.12s ease, opacity 0.12s ease;
+}
+.cm-editor .cm-md-marker-open {
+  max-width: 4em;
+  opacity: 0.35;
+}
+
 /* Sits at the end of a block's opening fence line, beside the language name. */
 .cm-editor .cm-copy {
   float: right;
@@ -210,14 +244,17 @@ body.editing #tools > * { visibility: visible; }
   cursor: default;
   transition: opacity 0.12s ease;
 
-  /* Always visible, just quiet. CodeMirror renders each line as its own
-     element with nothing wrapping the block, so there is no "hovering the
-     code block" to hang a reveal on -- keying it to the fence line alone made
-     the button findable only by someone who already knew it was there. */
-  opacity: 0.4;
+  /* Hidden until the pointer is anywhere in the block. CodeMirror renders
+     each line as its own element with nothing wrapping the block, so there is
+     no element to hang a :hover on -- live-editor.js works the hovered block
+     out from the pointer's document position and adds .cm-copy-open. Keying
+     it to the fence line alone left the button findable only by someone who
+     already knew it was there. */
+  opacity: 0;
+  pointer-events: none;
 }
-.cm-editor .cm-md-code-first:hover .cm-copy { opacity: 0.75; }
-.cm-editor .cm-copy:hover { opacity: 1; background: rgba(0, 0, 0, 0.16); }
+.cm-editor .cm-copy-open { opacity: 0.55; pointer-events: auto; }
+.cm-editor .cm-copy-open:hover { opacity: 1; background: rgba(0, 0, 0, 0.16); }
 .cm-editor .cm-copy.done { opacity: 1; background: rgba(47, 107, 74, 0.22); }
 
 .cm-editor .cm-table {

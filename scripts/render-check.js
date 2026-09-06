@@ -50,6 +50,99 @@ app.whenReady().then(async () => {
   \`).catch((e) => 'error: ' + e.message);
   console.log('PROBE_CLICK ' + ticked);
 
+  // The markers are in the document, hidden by width. Navigation only stays
+  // coherent if they come back the moment the caret is on their element, so
+  // that is what is measured -- not whether the characters are absent.
+  const interact = await w.webContents.executeJavaScript(\`
+    (async () => {
+      const view = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
+      const width = () => {
+        const el = document.querySelector('.cm-md-h1 .cm-md-marker');
+        return el ? el.getBoundingClientRect().width : -1;
+      };
+      const heading = document.querySelector('.cm-md-h1');
+      const shut = width();
+      // The caret at the very start of the heading line, where Left arrow
+      // leaves it when you walk in from the line above.
+      view.dispatch({ selection: { anchor: view.posAtDOM(heading) } });
+      // The marker slides rather than reappearing, so it has no width yet:
+      // measuring straight away is measuring the start of the transition.
+      await new Promise((r) => setTimeout(r, 300));
+      const open = width();
+      const marker = document.querySelector('.cm-md-h1 .cm-md-marker');
+      const markerText = marker ? marker.textContent : '';
+
+      // The caret inside "bold" must open that word's stars and nothing else
+      // on the line -- the reveal is per element, not per line.
+      const text = view.state.doc.toString();
+      view.dispatch({ selection: { anchor: text.indexOf('**bold**') + 3 } });
+      await new Promise((r) => setTimeout(r, 300));
+      const perWord = [...document.querySelectorAll('.cm-md-marker')]
+        .filter((el) => el.classList.contains('cm-md-marker-open'))
+        .map((el) => el.textContent).join('');
+
+      const codeLine = document.querySelector('.cm-md-code');
+      const box = codeLine.getBoundingClientRect();
+      const before = Number(getComputedStyle(document.querySelector('.cm-copy')).opacity);
+      codeLine.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + box.height / 2,
+      }));
+      const after = Number(getComputedStyle(document.querySelector('.cm-copy')).opacity);
+      // The link sits on the last line, below a 640px window, and CodeMirror
+      // only builds DOM for the viewport. Scroll there so the checks below
+      // can see it.
+      view.dispatch({ effects: window.CM.EditorView.scrollIntoView(view.state.doc.length) });
+      return JSON.stringify({ shut, open, text: markerText, perWord,
+        copyBefore: before, copyAfter: after,
+      });
+    })()
+  \`).catch((e) => JSON.stringify({ error: e.message }));
+  console.log('PROBE_INTERACT ' + interact);
+
+  // Zero-width text is where selection and undo usually surprise you, so both
+  // are exercised rather than reasoned about.
+  const keys = await w.webContents.executeJavaScript(\`
+    (async () => { try {
+      const view = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
+      const heading = document.querySelector('.cm-md-h1');
+      const range = document.createRange();
+      range.selectNodeContents(heading);
+      const dom = window.getSelection();
+      dom.removeAllRanges();
+      dom.addRange(range);
+      const copied = dom.toString();
+      dom.removeAllRanges();
+
+      // Double-escaped on purpose: this source passes through two template
+      // literals, and a single backslash-n arrives as a real newline that
+      // breaks the string literal it sits in.
+      // Walking up from the last line must visit every line on the way,
+      // including the heading. A marker with no height leaves the line
+      // unhittable and vertical motion steps straight over it.
+      const up = window.CM.defaultKeymap.find((b) => b.key === 'ArrowUp').run;
+      view.focus();
+      view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true });
+      await new Promise((r) => setTimeout(r, 300));
+      const walk = [];
+      for (let i = 0; i < 8; i++) {
+        up(view);
+        await new Promise((r) => setTimeout(r, 60));
+        walk.push(view.state.doc.lineAt(view.state.selection.main.head).number);
+      }
+
+      const end = view.state.doc.length;
+      view.dispatch({ changes: { from: end, insert: '\\\\n## New' }, selection: { anchor: end + 7 } });
+      const typed = view.state.doc.toString();
+      const undo = window.CM.historyKeymap.find((b) => b.key === 'Mod-z').run;
+      undo(view);
+      const undone = view.state.doc.length === end;
+      return JSON.stringify({ copied, walk, typedOk: typed.endsWith('## New'), undone });
+      } catch (e) { return JSON.stringify({ error: String(e) }); } })()
+  \`).catch((e) => JSON.stringify({ error: e.message }));
+  console.log('PROBE_KEYS ' + keys);
+
   console.log('PROBE ' + await w.webContents.executeJavaScript(\`JSON.stringify({
     editor: !!document.querySelector('.cm-editor'),
     math: document.querySelectorAll('.cm-math .katex').length,
@@ -58,12 +151,15 @@ app.whenReady().then(async () => {
     code: document.querySelectorAll('.cm-md-code').length,
     heading: document.querySelectorAll('.cm-md-h1').length,
     highlighted: document.querySelectorAll('.cm-md-code span[class]').length,
-    hidMarkers: !document.querySelector('.cm-content').innerText.includes('**bold**'),
+    markerWidth: Math.max(...[...document.querySelectorAll('.cm-md-marker:not(.cm-md-marker-open)')]
+      .map((el) => el.getBoundingClientRect().width)),
+    markers: document.querySelectorAll('.cm-md-marker').length,
     proseFont: getComputedStyle(document.querySelector('.cm-line:not(.cm-md-code)')).fontFamily,
     codeFont: getComputedStyle(document.querySelector('.cm-md-code')).fontFamily,
-    fenceTicks: document.querySelector('.cm-content').innerText.includes('\\u0060\\u0060\\u0060'),
+    fenceTicks: [...document.querySelectorAll('.cm-md-marker')]
+      .some((el) => el.textContent.includes('\\u0060\\u0060\\u0060')),
     copyButtons: document.querySelectorAll('.cm-copy').length,
-    copyOpacity: Number(getComputedStyle(document.querySelector('.cm-copy')).opacity),
+
     titleIndent: document.querySelector('.cm-md-h1').innerText.startsWith(' '),
     contentPad: parseFloat(getComputedStyle(document.querySelector('.cm-content')).paddingLeft),
     headingUnderline: getComputedStyle(
@@ -99,6 +195,10 @@ child.on('exit', () => {
   const r = JSON.parse(line.slice(6));
   const clickLine = out.split('\n').find((l) => l.startsWith('PROBE_CLICK '));
   r.checkboxToggled = clickLine && clickLine.includes('toggled');
+  const interactLine = out.split('\n').find((l) => l.startsWith('PROBE_INTERACT '));
+  const i = interactLine ? JSON.parse(interactLine.slice(15)) : {};
+  const keysLine = out.split('\n').find((l) => l.startsWith('PROBE_KEYS '));
+  const k = keysLine ? JSON.parse(keysLine.slice(11)) : {};
   const checks = [
     ['editor mounted', r.editor],
     ['maths rendered by KaTeX', r.math >= 2],
@@ -108,13 +208,25 @@ child.on('exit', () => {
     ['code block styled', r.code >= 3],
     ['heading styled', r.heading >= 1],
     ['fenced code highlighted', r.highlighted > 0],
-    ['emphasis markers hidden', r.hidMarkers],
+    ['syntax markers kept in the document', r.markers >= 3],
+    ['syntax markers take no width', r.markerWidth === 0],
+    ['a marker reappears when the caret is on its line', i.open > 0 && i.shut === 0],
+    ['the revealed marker is the hash and its space', i.text === '# '],
+    ['only the caret\'s own element shows its markers', i.perWord === '****'],
+    ['copying a heading takes the text, not its markers', k.copied === 'Welcome to LaTeX Stickies'],
+    // A repeat is a wrapped line, which is fine; a gap is a line the caret
+    // could not land on.
+    ['arrowing up visits every line, heading included',
+      Array.isArray(k.walk) && k.walk.includes(27)
+        && k.walk.every((n, idx) => idx === 0 || n === k.walk[idx - 1] || n === k.walk[idx - 1] - 1)],
+    ['undo after typing a heading marker steps back over it', k.typedOk && k.undone],
     // CodeMirror's base theme sets monospace on everything; prose must escape it.
     ['prose is not monospace', !/mono/i.test(r.proseFont || '')],
     ['code is monospace', /mono/i.test(r.codeFont || '')],
-    ['fence backticks hidden', r.fenceTicks === false],
+    ['fence backticks are markers, not text', r.fenceTicks === true],
     ['copy buttons on the code blocks', r.copyButtons >= 1],
-    ['copy button visible without hovering', r.copyOpacity > 0.2],
+    ['copy button hidden until the block is hovered', i.copyBefore === 0],
+    ['hovering the code block reveals it', i.copyAfter > 0.2],
     ['heading not indented by its hidden marker', r.titleIndent === false],
     ['content inset from the window edge', r.contentPad >= 8],
     ['headings are not underlined', !/underline/.test(r.headingUnderline || '')],

@@ -15,7 +15,8 @@
  */
 
 const {
-  EditorState, StateField, EditorView, Decoration, WidgetType, keymap, Prec,
+  EditorState, StateField, StateEffect, EditorView, Decoration, WidgetType, ViewPlugin,
+  keymap, Prec,
   defaultKeymap, history, historyKeymap, indentWithTab,
   markdown, markdownLanguage, codeLanguages,
   syntaxTree, HighlightStyle, syntaxHighlighting, defaultHighlightStyle, tags,
@@ -126,18 +127,19 @@ class BulletWidget extends WidgetType {
 }
 
 class CopyButtonWidget extends WidgetType {
-  constructor(code) {
+  constructor(code, visible) {
     super();
     this.code = code;
+    this.visible = visible;
   }
 
   eq(other) {
-    return other.code === this.code;
+    return other.code === this.code && other.visible === this.visible;
   }
 
   toDOM() {
     const button = document.createElement('span');
-    button.className = 'cm-copy';
+    button.className = this.visible ? 'cm-copy cm-copy-open' : 'cm-copy';
     button.textContent = 'Copy';
     button.title = 'Copy this block';
     button.addEventListener('mousedown', (e) => {
@@ -291,6 +293,32 @@ class RuleWidget extends WidgetType {
 
 const HIDE = Decoration.replace({});
 
+/**
+ * A syntax marker that is hidden by width rather than removed.
+ *
+ * Replacing "## " takes it out of the rendered line entirely, so the caret
+ * jumps over it and the heading pops between two widths as you arrive. Kept as
+ * a mark at font-size 0 the characters stay in the line box and can simply
+ * slide back in. Only their width animates -- the heading text beside them
+ * already sets the line height -- so CodeMirror's vertical measurements, which
+ * drive cursor placement and scrolling, are never in motion.
+ *
+ * The class never varies. A decoration with a different class is a different
+ * decoration, and CodeMirror rebuilds the span rather than restyling it --
+ * a brand new element has no previous width to animate from, so the marker
+ * snapped back into place. The reveal is `markerReveal` below, which sets a
+ * class on the existing element and leaves the decoration alone.
+ */
+const MARKER = Decoration.mark({ class: 'cm-md-marker' });
+
+/** Elements whose markers are shown while the caret is inside them. */
+const REVEAL = new Set([
+  'Emphasis', 'StrongEmphasis', 'Strikethrough', 'InlineCode', 'FencedCode',
+  'Blockquote', 'ListItem', 'Link',
+  'ATXHeading1', 'ATXHeading2', 'ATXHeading3',
+  'ATXHeading4', 'ATXHeading5', 'ATXHeading6',
+]);
+
 /** Line classes for blocks that keep their markdown but are styled as blocks. */
 const LINE_CLASS = {
   Table: 'cm-md-table',
@@ -309,6 +337,47 @@ const MARKS = new Set([
   'EmphasisMark', 'StrongEmphasisMark', 'HeaderMark', 'LinkMark',
   'QuoteMark', 'StrikethroughMark',
 ]);
+
+/**
+ * Which fenced block the pointer is over, as its start position, or -1.
+ *
+ * Each line is its own element with nothing wrapping the block, so there is no
+ * element to hang a CSS :hover on -- hovering has to be worked out from the
+ * pointer's document position instead.
+ */
+const setHoveredFence = StateEffect.define();
+
+const hoveredFence = StateField.define({
+  create: () => -1,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setHoveredFence)) return effect.value;
+    return tr.docChanged ? -1 : value;
+  },
+});
+
+/** Reports the fenced block under the pointer, dispatching only on a change. */
+const fenceHover = EditorView.domEventHandlers({
+  mousemove(event, view) {
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    let fence = -1;
+    if (pos !== null) {
+      for (let node = syntaxTree(view.state).resolveInner(pos, 1); node; node = node.parent) {
+        if (node.name === 'FencedCode') {
+          fence = node.from;
+          break;
+        }
+      }
+    }
+    if (fence !== view.state.field(hoveredFence)) {
+      view.dispatch({ effects: setHoveredFence.of(fence) });
+    }
+  },
+  mouseleave(_event, view) {
+    if (view.state.field(hoveredFence) !== -1) {
+      view.dispatch({ effects: setHoveredFence.of(-1) });
+    }
+  },
+});
 
 function buildDecorations(state) {
   const sel = state.selection.main;
@@ -389,7 +458,10 @@ function buildDecorations(state) {
             ranges.push({
               from: openLine.to,
               to: openLine.to,
-              value: Decoration.widget({ widget: new CopyButtonWidget(body), side: 1 }),
+              value: Decoration.widget({
+                widget: new CopyButtonWidget(body, state.field(hoveredFence, false) === node.from),
+                side: 1,
+              }),
             });
           }
         }
@@ -444,13 +516,10 @@ function buildDecorations(state) {
         return;
       }
 
-      // The ``` runs are punctuation, not content. Hide them unless the caret
-      // is in this block; the language name stays as the block's label.
+      // The ``` runs are punctuation, not content. They stay hidden until the
+      // caret is on their line; the language name is the block's label.
       if (node.name === 'CodeMark' && node.to - node.from >= 3) {
-        const fence = node.node.parent || node;
-        if (!cursorInside(fence.from, fence.to)) {
-          ranges.push({ from: node.from, to: node.to, value: HIDE });
-        }
+        ranges.push({ from: node.from, to: node.to, value: MARKER });
         return;
       }
 
@@ -493,7 +562,7 @@ function buildDecorations(state) {
         ranges.push({
           from: node.from,
           to: node.to,
-          value: isTask ? HIDE : Decoration.replace({ widget: new BulletWidget() }),
+          value: isTask ? MARKER : Decoration.replace({ widget: new BulletWidget() }),
         });
         return;
       }
@@ -502,24 +571,18 @@ function buildDecorations(state) {
         // Inline backticks only: hiding a fence would strand its language
         // label and the block's boundaries.
         if (node.to - node.from > 2) return;
-        const parent = node.node.parent || node;
-        if (!cursorInside(parent.from, parent.to)) {
-          ranges.push({ from: node.from, to: node.to, value: HIDE });
-        }
+        ranges.push({ from: node.from, to: node.to, value: MARKER });
         return;
       }
 
       if (MARKS.has(node.name)) {
-        const parent = node.node.parent || node;
-        if (cursorInside(parent.from, parent.to)) return;
-
         // Take the space that follows a heading or quote marker with it.
         // Hiding "#" alone leaves the title indented by one space.
         let to = node.to;
         if (node.name === 'HeaderMark' || node.name === 'QuoteMark') {
           while (state.doc.sliceString(to, to + 1) === ' ') to += 1;
         }
-        ranges.push({ from: node.from, to, value: HIDE });
+        ranges.push({ from: node.from, to, value: MARKER });
       }
     },
   });
@@ -530,6 +593,63 @@ function buildDecorations(state) {
 }
 
 /**
+ * Shows the markers of whichever element the caret is in.
+ *
+ * This is a plugin rather than a decoration because the reveal has to leave
+ * the DOM node alone: change the decoration and CodeMirror builds a new span,
+ * which has no width to animate from and snaps. Setting a class on the element
+ * already there is what lets it slide.
+ *
+ * It also asks for a re-measure when the slide finishes. The caret is
+ * positioned once, at the start of the transition, so without this it sits a
+ * few pixels off the text until the next keystroke -- which reads as a click
+ * that did not take.
+ */
+const markerReveal = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.view = view;
+    this.onEnd = (event) => {
+      if (event.target.classList.contains('cm-md-marker')) view.requestMeasure();
+    };
+    view.contentDOM.addEventListener('transitionend', this.onEnd);
+    this.sync();
+  }
+
+  update(update) {
+    if (update.docChanged || update.selectionSet || update.viewportChanged) this.sync();
+  }
+
+  destroy() {
+    this.view.contentDOM.removeEventListener('transitionend', this.onEnd);
+  }
+
+  sync() {
+    const { view } = this;
+    const sel = view.state.selection.main;
+    let from = -1;
+    let to = -1;
+    if (!snapshotMode) {
+      for (let node = syntaxTree(view.state).resolveInner(sel.from, 1); node; node = node.parent) {
+        if (REVEAL.has(node.name) && sel.to <= node.to) {
+          from = node.from;
+          to = node.to;
+          break;
+        }
+      }
+    }
+    for (const el of view.contentDOM.querySelectorAll('.cm-md-marker')) {
+      let pos;
+      try {
+        pos = view.posAtDOM(el);
+      } catch (_) {
+        continue; // mid-update, and the next sync will catch it
+      }
+      el.classList.toggle('cm-md-marker-open', pos >= from && pos < to);
+    }
+  }
+});
+
+/**
  * Decorations live in a state field rather than a view plugin. Display maths
  * replaces a whole line, and CodeMirror only accepts block decorations from a
  * field -- a plugin providing one throws outright.
@@ -537,7 +657,10 @@ function buildDecorations(state) {
 const livePreview = StateField.define({
   create: (state) => buildDecorations(state),
   update(deco, tr) {
-    if (tr.docChanged || tr.selection || snapshotDirty) return buildDecorations(tr.state);
+    const hovered = tr.effects.some((effect) => effect.is(setHoveredFence));
+    if (tr.docChanged || tr.selection || hovered || snapshotDirty) {
+      return buildDecorations(tr.state);
+    }
     return deco.map(tr.changes);
   },
   provide: (field) => EditorView.decorations.from(field),
@@ -614,7 +737,10 @@ function createLiveEditor({ parent, doc, onChange }) {
         markdown({ base: markdownLanguage, codeLanguages }),
         Prec.high(syntaxHighlighting(markdownStyle)),
         syntaxHighlighting(defaultHighlightStyle), // colours inside code fences
+        hoveredFence,
         livePreview,
+        markerReveal,
+        fenceHover,
         ghostCompletion(),
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
