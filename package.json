@@ -1,6 +1,6 @@
 {
   "name": "latex-stickies",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Sticky notes for your desktop that render LaTeX and Markdown.",
   "main": "src/main.js",
   "scripts": {
