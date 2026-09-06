@@ -618,8 +618,13 @@ const markerReveal = ViewPlugin.fromClass(class {
     this.sync();
   }
 
-  update(update) {
-    if (update.docChanged || update.selectionSet || update.viewportChanged) this.sync();
+  update() {
+    // Every update, not only the ones that moved the caret. The parser runs
+    // behind the keystroke, so the first "#" of a heading arrives as a plain
+    // character and becomes a marker on a later update that changed neither
+    // the document nor the selection. Skipping those left the reveal one
+    // keystroke behind: a heading stayed hidden while it was being typed.
+    this.sync();
   }
 
   destroy() {
@@ -632,12 +637,21 @@ const markerReveal = ViewPlugin.fromClass(class {
     let from = -1;
     let to = -1;
     if (!snapshotMode) {
-      for (let node = syntaxTree(view.state).resolveInner(sel.from, 1); node; node = node.parent) {
-        if (REVEAL.has(node.name) && sel.to <= node.to) {
-          from = node.from;
-          to = node.to;
-          break;
+      const tree = syntaxTree(view.state);
+      // Both sides of the caret, and the side before it first. Typing "###"
+      // leaves the caret at the end of the line, where the node *starting*
+      // here is the document, not the heading -- so looking forward only, a
+      // heading stayed hidden the whole time you were typing it.
+      const enclosing = (side) => {
+        for (let node = tree.resolveInner(sel.from, side); node; node = node.parent) {
+          if (REVEAL.has(node.name) && sel.to <= node.to) return node;
         }
+        return null;
+      };
+      const node = enclosing(-1) || enclosing(1);
+      if (node) {
+        from = node.from;
+        to = node.to;
       }
     }
     for (const el of view.contentDOM.querySelectorAll('.cm-md-marker')) {

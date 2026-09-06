@@ -6,6 +6,9 @@
  * signature, so a rebuilt copy starts with none -- and the app used to fail
  * that read, restore nothing and open no window, which looks exactly like a
  * launch that crashed. A denied folder must say so.
+ *
+ * Quit the app first, as with smoke.js: the single-instance lock makes a
+ * second launch exit immediately, which would read as a silent failure here.
  */
 const { spawn } = require('child_process');
 const path = require('path');
@@ -53,6 +56,13 @@ const timer = setTimeout(
   () => done(false, 'a refused notes folder was never reported'),
   25000
 );
+
+child.on('exit', (code) => {
+  if (!/notes folder refused/.test(out)) {
+    done(false, `the app exited (code ${code}) without reporting the refusal`
+      + ' -- is another copy already running?');
+  }
+});
 
 const poll = setInterval(() => {
   if (/notes folder refused: (EPERM|EACCES)/.test(out)) {

@@ -155,6 +155,28 @@ app.whenReady().then(async () => {
       undo(view);
       const undone = view.state.doc.length === end;
       const original = view.state.doc.toString();
+      // Typing a heading must show its hashes as they are typed. The parser
+      // runs behind the keystroke, so this is where the reveal was a
+      // keystroke late and a heading was written blind.
+      const typing = [];
+      {
+        const at = view.state.doc.length;
+        view.dispatch({ changes: { from: at, insert: String.fromCharCode(10) },
+          selection: { anchor: at + 1 } });
+        await new Promise((r) => setTimeout(r, 260));
+        for (const ch of ['#', '#', '#']) {
+          const head = view.state.selection.main.head;
+          view.dispatch({ changes: { from: head, insert: ch }, selection: { anchor: head + 1 } });
+          await new Promise((r) => setTimeout(r, 260));
+          const line = view.state.doc.lineAt(view.state.selection.main.head);
+          const dom = view.domAtPos(line.from).node;
+          const el = (dom.nodeType === 1 ? dom : dom.parentElement)
+            .closest('.cm-line').querySelector('.cm-md-marker');
+          typing.push(el && el.classList.contains('cm-md-marker-open')
+            && el.getBoundingClientRect().width > 0);
+        }
+      }
+
       // Enter has to carry a list on, or a bare line after a task invites
       // "[ ] thing", which looks like a task and is not one. A second Enter on
       // an item with nothing in it should end the list rather than extend it.
@@ -185,7 +207,7 @@ app.whenReady().then(async () => {
       // or the checks that follow measure one mid-transition.
       view.dispatch({ selection: { anchor: 0 } });
       await new Promise((r) => setTimeout(r, 300));
-      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, listed, typedOk: typed.endsWith('## New'), undone });
+      return JSON.stringify({ copied, walk, walkDown, walkShift, extended, listed, typing, typedOk: typed.endsWith('## New'), undone });
       } catch (e) { return JSON.stringify({ error: String(e) }); } })()
   \`).catch((e) => JSON.stringify({ error: e.message }));
   console.log('PROBE_KEYS ' + keys);
@@ -272,6 +294,8 @@ child.on('exit', () => {
       Array.isArray(k.walkDown) && k.walkDown.join() === '23,24,25,26,27'],
     // A quote is the exception, and CodeMirror's own: an empty "> " carries
     // on rather than ending, so it is recorded here rather than asserted away.
+    ['a heading shows its hashes while it is being typed',
+      Array.isArray(k.typing) && k.typing.length === 3 && k.typing.every(Boolean)],
     ['Enter carries a list on, and an empty item ends it',
       (k.listed || []).join('|') === '- [ ] eggs||- two||2. two||> more|> '],
     ['shift-arrow extends a line at a time too',
