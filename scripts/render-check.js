@@ -82,6 +82,14 @@ app.whenReady().then(async () => {
       const open = width();
       const openOpacity = Number(getComputedStyle(
         document.querySelector('.cm-md-marker-open')).opacity);
+
+      // Colour, not opacity, is what makes a marker quiet: a faded one sinks
+      // into the paper, and counting the hashes of a heading stops working.
+      const inkOf = (el) => getComputedStyle(el.querySelector('span') || el).color;
+      const markerColour = inkOf(stars());
+      const bodyColour = getComputedStyle(document.querySelector('.cm-content')).color;
+      const headColour = inkOf([...document.querySelectorAll('.cm-md-marker')]
+        .find((el) => el.textContent.startsWith('#')));
       const perWord = [...document.querySelectorAll('.cm-md-marker')]
         .filter((el) => el.classList.contains('cm-md-marker-open'))
         .map((el) => el.textContent).join('');
@@ -99,7 +107,8 @@ app.whenReady().then(async () => {
       // only builds DOM for the viewport. Scroll there so the checks below
       // can see it.
       view.dispatch({ effects: window.CM.EditorView.scrollIntoView(view.state.doc.length) });
-      return JSON.stringify({ shut, open, openOpacity, text: markerText, perWord,
+      return JSON.stringify({ shut, open, openOpacity, markerColour, bodyColour, headColour,
+        text: markerText, perWord,
         copyBefore: before, copyAfter: after,
       });
     })()
@@ -280,6 +289,9 @@ child.on('exit', () => {
     ['syntax markers kept in the document', r.markers >= 3],
     ['syntax markers take no width', r.markerWidth === 0],
     ['a revealed marker is fully opaque', i.openOpacity === 1],
+    ['a marker is drawn in the marker grey', i.markerColour === 'rgb(117, 117, 117)'],
+    ['a marker is not the colour of the prose', i.markerColour !== i.bodyColour],
+    ['every kind of marker agrees on it', i.headColour === i.markerColour],
     ['a marker reappears when the caret is on its element', i.open > 0 && i.shut === 0],
     ['the revealed marker is the pair of stars', i.text === '**'],
     ['only the caret\'s own element shows its markers', i.perWord === '****'],

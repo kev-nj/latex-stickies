@@ -685,9 +685,24 @@ const livePreview = StateField.define({
 
 /* ---------- how markdown reads ---------- */
 
+/**
+ * Markers are punctuation, not prose, and should not compete with the text
+ * they mark up. CodeMirror's default paints them #404740 -- all but the ink
+ * colour -- because every marker carries tags.processingInstruction, a child
+ * of meta, and defaultHighlightStyle is loaded here for its code colours.
+ *
+ * A flat grey rather than a faded ink: fading a marker into the paper is what
+ * made an H1 and an H2 indistinguishable while one was being typed.
+ */
+const MARKER_INK = '#757575';
+
 const markdownStyle = HighlightStyle.define([
   // textDecoration: 'none' is deliberate -- defaultHighlightStyle, loaded for
   // the colours inside code fences, underlines every heading.
+  // One entry covers every marker: the hashes, the stars, the backticks, the
+  // quote arrow, the list dash, a table's pipes and a strikethrough's tildes
+  // all carry this tag.
+  { tag: tags.processingInstruction, color: MARKER_INK },
   { tag: tags.heading, textDecoration: 'none' },
   { tag: tags.heading1, fontSize: '1.35em', fontWeight: '600', textDecoration: 'none' },
   { tag: tags.heading2, fontSize: '1.18em', fontWeight: '600', textDecoration: 'none' },
