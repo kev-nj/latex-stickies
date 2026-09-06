@@ -100,6 +100,17 @@ jobs:
         if: runner.os != 'Linux'
         run: node scripts/conflict-check.js
 
+      # A folder the app is not allowed to read is not a hypothetical: macOS
+      # ties Documents access to the signature, so every rebuild starts with
+      # none, and the app used to open nothing and say nothing.
+      - name: Refused notes folder (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/denied-check.js
+
+      - name: Refused notes folder
+        if: runner.os != 'Linux'
+        run: node scripts/denied-check.js
+
       # What a user actually installs, which nothing else here exercises: a
       # checkout runs from source and a built .app is branded by
       # electron-builder, so six releases in a row shipped a Dock name or icon

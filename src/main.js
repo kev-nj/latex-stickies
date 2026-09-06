@@ -527,6 +527,37 @@ function watchNotesFolder() {
   });
 }
 
+/**
+ * macOS can refuse the notes folder outright, and quietly.
+ *
+ * Documents is protected, and permission is tied to the app's signature -- so
+ * a rebuilt copy is a different app to the system and starts again with no
+ * access. Reading the folder then fails, nothing is restored and no window
+ * opens, which is indistinguishable from a launch that crashed. Say what
+ * happened instead, and offer the settings pane that fixes it.
+ */
+function reportNoAccess(err) {
+  // Printed as well as shown: the dialog is the answer for the person at the
+  // screen, this line is what a harness or a bug report can see.
+  console.error(`notes folder refused: ${err.code} ${store.DIR}`);
+  const settings = 'x-apple.systempreferences:com.apple.preference.security'
+    + '?Privacy_DocumentsFolder';
+  const choice = dialog.showMessageBoxSync({
+    type: 'error',
+    message: 'LaTeX Stickies cannot read your notes',
+    detail: `macOS is not letting it open ${store.DIR}.\n\n`
+      + 'Allow it under Privacy & Security, in Files and Folders, then open '
+      + `the app again.\n\n(${err.code}: ${err.message})`,
+    buttons: ['Open Privacy Settings', 'Quit'],
+    defaultId: 0,
+  });
+  if (choice === 0 && process.platform === 'darwin') shell.openExternal(settings);
+  app.quit();
+}
+
+/** True when the filesystem said no, rather than the folder being absent. */
+const denied = (err) => err && (err.code === 'EPERM' || err.code === 'EACCES');
+
 app.whenReady().then(async () => {
   // Run from npm there is no .app bundle of our own to carry the icon, so
   // macOS would show the generic Electron atom in the Dock. Set it explicitly.
@@ -546,9 +577,15 @@ app.whenReady().then(async () => {
     }
   }
 
-  await buildMenu();
-  restoreNotes();
-  watchNotesFolder();
+  try {
+    await buildMenu();
+    restoreNotes();
+    watchNotesFolder();
+  } catch (err) {
+    if (!denied(err)) throw err;
+    reportNoAccess(err);
+    return;
+  }
 
   if (SMOKE_CLOSE_MS) {
     setTimeout(() => {

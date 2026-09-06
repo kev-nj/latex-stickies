@@ -94,6 +94,10 @@ function isCurrent(version) {
   }
 }
 
+/** Shown in the macOS prompt asking to let the app read the notes folder. */
+const DOCUMENTS_REASON = 'LaTeX Stickies keeps your notes as Markdown files in '
+  + 'Documents, so you can read and edit them with any other app.';
+
 function setPlist(plist, key, value) {
   try {
     run('plutil', ['-replace', key, '-string', value, plist]);
@@ -126,6 +130,10 @@ function build(app, version) {
   setPlist(plist, 'CFBundleDisplayName', NAME);
   setPlist(plist, 'CFBundleIdentifier', APP_ID);
   setPlist(plist, 'CFBundleExecutable', NAME);
+  // Without this key macOS denies the notes folder without ever asking. The
+  // app then starts, reads nothing and shows no window, which looks exactly
+  // like a launch that failed.
+  setPlist(plist, 'NSDocumentsFolderUsageDescription', DOCUMENTS_REASON);
 
   const from = path.join(TARGET, 'Contents', 'MacOS', 'Electron');
   const to = path.join(TARGET, 'Contents', 'MacOS', NAME);

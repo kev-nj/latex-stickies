@@ -25,6 +25,9 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "LaTeX Stickies keeps your notes as Markdown files in Documents, so you can read and edit them with any other app."
+      },
       "target": [
         "dmg",
         "zip"

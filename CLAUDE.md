@@ -27,6 +27,7 @@ node scripts/render-check.js       # live preview actually rendered
 node scripts/ghost-check.js        # autocomplete suggests, Tab accepts
 node scripts/snapshot-check.js     # a long note is captured whole
 node scripts/conflict-check.js     # the changed-on-disk banner behaves
+node scripts/denied-check.js       # a notes folder it may not read is reported
 node scripts/verify-install.js     # the npm install path, end to end
 ```
 
