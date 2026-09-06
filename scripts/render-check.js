@@ -37,9 +37,16 @@ app.whenReady().then(async () => {
   await w.loadFile(${JSON.stringify(path.join(ROOT, 'src/renderer/note.html'))});
   await new Promise((r) => setTimeout(r, 2500));
   // Click the checkbox and see whether the markdown actually flipped.
+  // Poll rather than trust the wait above. A loaded CI runner has taken
+  // longer than this to draw the first widgets, which failed here as a
+  // checkbox that would not tick.
   const ticked = await w.webContents.executeJavaScript(\`
-    (() => {
-      const box = document.querySelector('.cm-task');
+    (async () => {
+      let box = null;
+      for (let i = 0; i < 60 && !box; i++) {
+        box = document.querySelector('.cm-task');
+        if (!box) await new Promise((r) => setTimeout(r, 100));
+      }
       if (!box) return 'no checkbox';
       const view = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
       const before = view.state.doc.toString();
