@@ -160,20 +160,32 @@ body.editing #tools > * { visibility: visible; }
   opacity: 0.85;
 }
 
+/* Smaller text, but the same line box as prose. CodeMirror moves the caret
+   vertically by one default line height, so a line shorter than that gets
+   stepped over: arrowing up out of a code block landed above it, and clicking
+   a line put the caret on the one below. Dividing the prose line height by the
+   font size keeps the block looking the same and the geometry uniform. */
 .cm-editor .cm-md-table {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.9em;
+  line-height: calc(1.55 / 0.9);
   background: rgba(0, 0, 0, 0.04);
 }
 
 .cm-editor .cm-md-code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.86em;
+  line-height: calc(1.55 / 0.86);
   background: rgba(0, 0, 0, 0.07);
-  /* Negative margin pulls the tint just past the text, then padding puts the
-     code back where it was -- so the block reads as a panel with breathing
-     room, without the tint running into the window edge. */
-  margin: 0 2px;
+  /* The block reads as a panel with breathing room, without the tint running
+     into the window edge. Transparent borders rather than a margin: a margin
+     takes those 2px out of the line's box, and CodeMirror could then not hit
+     the line at that x -- clicking there did nothing, and arrowing up out of
+     a code block sailed over the whole block looking for something it could
+     land on. */
+  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
+  background-clip: padding-box;
   padding-left: 8px;
   padding-right: 8px;
 }
