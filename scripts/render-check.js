@@ -63,27 +63,25 @@ app.whenReady().then(async () => {
   const interact = await w.webContents.executeJavaScript(\`
     (async () => {
       const view = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
+      // The stars of the bold word, not simply the first marker in the note:
+      // that one is the heading's hash, and the caret is nowhere near it.
+      const stars = () => [...document.querySelectorAll('.cm-md-marker')]
+        .find((el) => el.textContent === '**');
       const width = () => {
-        const el = document.querySelector('.cm-md-h1 .cm-md-marker');
+        const el = stars();
         return el ? el.getBoundingClientRect().width : -1;
       };
-      const heading = document.querySelector('.cm-md-h1');
       const shut = width();
-      // The caret at the very start of the heading line, where Left arrow
-      // leaves it when you walk in from the line above.
-      view.dispatch({ selection: { anchor: view.posAtDOM(heading) } });
-      // The marker slides rather than reappearing, so it has no width yet:
-      // measuring straight away is measuring the start of the transition.
-      await new Promise((r) => setTimeout(r, 300));
-      const open = width();
-      const marker = document.querySelector('.cm-md-h1 .cm-md-marker');
-      const markerText = marker ? marker.textContent : '';
+      const markerText = stars() ? stars().textContent : '';
 
       // The caret inside "bold" must open that word's stars and nothing else
       // on the line -- the reveal is per element, not per line.
       const text = view.state.doc.toString();
       view.dispatch({ selection: { anchor: text.indexOf('**bold**') + 3 } });
       await new Promise((r) => setTimeout(r, 300));
+      const open = width();
+      const openOpacity = Number(getComputedStyle(
+        document.querySelector('.cm-md-marker-open')).opacity);
       const perWord = [...document.querySelectorAll('.cm-md-marker')]
         .filter((el) => el.classList.contains('cm-md-marker-open'))
         .map((el) => el.textContent).join('');
@@ -101,7 +99,7 @@ app.whenReady().then(async () => {
       // only builds DOM for the viewport. Scroll there so the checks below
       // can see it.
       view.dispatch({ effects: window.CM.EditorView.scrollIntoView(view.state.doc.length) });
-      return JSON.stringify({ shut, open, text: markerText, perWord,
+      return JSON.stringify({ shut, open, openOpacity, text: markerText, perWord,
         copyBefore: before, copyAfter: after,
       });
     })()
@@ -259,10 +257,12 @@ child.on('exit', () => {
     ['fenced code highlighted', r.highlighted > 0],
     ['syntax markers kept in the document', r.markers >= 3],
     ['syntax markers take no width', r.markerWidth === 0],
-    ['a marker reappears when the caret is on its line', i.open > 0 && i.shut === 0],
-    ['the revealed marker is the hash and its space', i.text === '# '],
+    ['a revealed marker is fully opaque', i.openOpacity === 1],
+    ['a marker reappears when the caret is on its element', i.open > 0 && i.shut === 0],
+    ['the revealed marker is the pair of stars', i.text === '**'],
     ['only the caret\'s own element shows its markers', i.perWord === '****'],
-    ['copying a heading takes the text, not its markers', k.copied === 'Welcome to LaTeX Stickies'],
+    ['copying a heading takes the text, not its markers',
+      k.copied === 'Welcome to LaTeX Stickies'],
     // A repeat is a wrapped line, which is fine; a gap is a line the caret
     // could not land on.
     ['arrowing up visits every line, code block included',

@@ -312,8 +312,6 @@ const HIDE = Decoration.replace({});
  */
 const MARKER = Decoration.mark({ class: 'cm-md-marker' });
 
-
-
 /** Elements whose markers are shown while the caret is inside them. */
 const REVEAL = new Set([
   'Emphasis', 'StrongEmphasis', 'Strikethrough', 'InlineCode', 'FencedCode',

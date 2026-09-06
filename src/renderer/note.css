@@ -237,9 +237,13 @@ body.editing #tools > * { visibility: visible; }
   opacity: 0;
   transition: max-width 0.12s ease, opacity 0.12s ease;
 }
+/* Full strength, not a hint. A revealed marker is there to be edited -- you
+   are counting hashes to see what level a heading is, or putting the caret
+   between a pair of stars -- and a washed-out one is hard to read against
+   the paper. It is the hiding that keeps the note clean, not the fading. */
 .cm-editor .cm-md-marker-open {
   max-width: 4em;
-  opacity: 0.35;
+  opacity: 1;
 }
 
 /* Sits at the end of a block's opening fence line, beside the language name. */
